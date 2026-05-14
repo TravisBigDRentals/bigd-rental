@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import type { Addon, Equipment } from "@/lib/bookings/queries";
 import { calculatePricing, formatCents } from "@/lib/pricing";
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 type DropoffTime = "9:00 AM" | "10:00 AM";
 
 type CustomerState = {
@@ -36,6 +37,9 @@ const EMPTY_CUSTOMER: CustomerState = {
   project_postal_code: "",
 };
 
+const SQUARE_APP_ID = process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID ?? "";
+const SQUARE_LOC_ID = process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID ?? "";
+
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -56,11 +60,13 @@ export function BookingForm({
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [customer, setCustomer] = useState<CustomerState>(EMPTY_CUSTOMER);
   const [specialInstructions, setSpecialInstructions] = useState<string>("");
+  const [bookingId, setBookingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [uploadingFront, setUploadingFront] = useState(false);
   const [uploadingBack, setUploadingBack] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [creatingBooking, setCreatingBooking] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   const selectedEquipment = useMemo(
     () => equipment.find((e) => e.id === equipmentId) ?? null,
@@ -147,17 +153,10 @@ export function BookingForm({
 
   async function goToStep2() {
     setError(null);
-    if (!equipmentId) {
-      setError("Pick a machine first");
-      return;
-    }
-    if (!startDate || !endDate) {
-      setError("Pick start and end dates");
-      return;
-    }
+    if (!equipmentId) return setError("Pick a machine first");
+    if (!startDate || !endDate) return setError("Pick start and end dates");
     if (new Date(endDate) < new Date(startDate)) {
-      setError("End date must be on or after start date");
-      return;
+      return setError("End date must be on or after start date");
     }
 
     setCheckingAvailability(true);
@@ -165,20 +164,12 @@ export function BookingForm({
       const res = await fetch("/api/bookings/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          equipment_id: equipmentId,
-          start_date: startDate,
-          end_date: endDate,
-        }),
+        body: JSON.stringify({ equipment_id: equipmentId, start_date: startDate, end_date: endDate }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? "Availability check failed");
-        return;
-      }
+      if (!res.ok) return setError(json.error ?? "Availability check failed");
       if (!json.available) {
-        setError("That machine is already booked on those dates. Try different dates or a different machine.");
-        return;
+        return setError("That machine is already booked on those dates. Try different dates or a different machine.");
       }
       setStep(2);
     } finally {
@@ -201,9 +192,16 @@ export function BookingForm({
     setStep(3);
   }
 
-  async function submitBooking() {
+  async function createBookingAndAdvanceToPay() {
     setError(null);
-    setSubmitting(true);
+
+    // If user came back from step 4, booking already exists — skip re-create
+    if (bookingId) {
+      setStep(4);
+      return;
+    }
+
+    setCreatingBooking(true);
     try {
       const res = await fetch("/api/bookings/create", {
         method: "POST",
@@ -237,9 +235,34 @@ export function BookingForm({
         setError(json.error ?? "Booking failed");
         return;
       }
-      router.push(`/book/confirmed?id=${json.booking_id}`);
+      setBookingId(json.booking_id);
+      setStep(4);
     } finally {
-      setSubmitting(false);
+      setCreatingBooking(false);
+    }
+  }
+
+  async function handlePaymentToken(sourceId: string) {
+    if (!bookingId) {
+      setError("Missing booking ID — go back and re-submit");
+      return;
+    }
+    setPaying(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/payments/charge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking_id: bookingId, source_id: sourceId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? "Payment failed");
+        return;
+      }
+      router.push(`/book/confirmed?id=${bookingId}`);
+    } finally {
+      setPaying(false);
     }
   }
 
@@ -259,7 +282,7 @@ export function BookingForm({
           equipmentId={equipmentId}
           setEquipmentId={(id) => {
             setEquipmentId(id);
-            setAddonIds([]); // reset addons when equipment changes
+            setAddonIds([]);
           }}
           startDate={startDate}
           setStartDate={setStartDate}
@@ -302,8 +325,19 @@ export function BookingForm({
           setSpecialInstructions={setSpecialInstructions}
           pricing={pricing}
           onBack={() => setStep(2)}
-          onSubmit={submitBooking}
-          submitting={submitting}
+          onNext={createBookingAndAdvanceToPay}
+          submitting={creatingBooking}
+        />
+      )}
+
+      {step === 4 && pricing && (
+        <StepPay
+          totalCents={pricing.totalCents}
+          applicationId={SQUARE_APP_ID}
+          locationId={SQUARE_LOC_ID}
+          paying={paying}
+          onPaymentToken={handlePaymentToken}
+          onBack={() => setStep(3)}
         />
       )}
     </div>
@@ -311,9 +345,9 @@ export function BookingForm({
 }
 
 function StepIndicator({ step }: { step: Step }) {
-  const labels = ["Configure", "Your info", "Review"];
+  const labels = ["Configure", "Your info", "Review", "Pay"];
   return (
-    <ol className="mb-10 flex items-center gap-2 font-mono text-xs uppercase tracking-widest">
+    <ol className="mb-10 flex flex-wrap items-center gap-2 font-mono text-xs uppercase tracking-widest">
       {labels.map((label, i) => {
         const n = (i + 1) as Step;
         const active = step === n;
@@ -380,9 +414,7 @@ function StepConfigure(props: {
                 type="button"
                 onClick={() => setEquipmentId(eq.id)}
                 className={`text-left rounded-2xl border p-5 transition-colors ${
-                  selected
-                    ? "border-accent bg-accent/5"
-                    : "border-ink/15 hover:border-ink/30 bg-paper"
+                  selected ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30 bg-paper"
                 }`}
               >
                 <p className="font-display text-lg font-semibold">{eq.name}</p>
@@ -402,31 +434,21 @@ function StepConfigure(props: {
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <label className="block">
             <span className="block text-sm font-medium">Start date</span>
-            <input
-              type="date"
-              value={startDate}
-              min={todayISO()}
+            <input type="date" value={startDate} min={todayISO()}
               onChange={(e) => setStartDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
           </label>
           <label className="block">
             <span className="block text-sm font-medium">End date</span>
-            <input
-              type="date"
-              value={endDate}
-              min={startDate}
+            <input type="date" value={endDate} min={startDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
           </label>
           <label className="block">
             <span className="block text-sm font-medium">Drop-off time</span>
-            <select
-              value={dropoffTime}
+            <select value={dropoffTime}
               onChange={(e) => setDropoffTime(e.target.value as DropoffTime)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-            >
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2">
               <option>9:00 AM</option>
               <option>10:00 AM</option>
             </select>
@@ -445,19 +467,14 @@ function StepConfigure(props: {
             {compatibleAddons.map((addon) => {
               const checked = addonIds.includes(addon.id);
               return (
-                <label
-                  key={addon.id}
+                <label key={addon.id}
                   className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
                     checked ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30"
-                  }`}
-                >
+                  }`}>
                   <span className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={checked}
+                    <input type="checkbox" checked={checked}
                       onChange={() => toggleAddon(addon.id)}
-                      className="h-4 w-4 accent-[var(--color-accent)]"
-                    />
+                      className="h-4 w-4 accent-[var(--color-accent)]" />
                     <span>{addon.name}</span>
                   </span>
                   <span className="font-mono text-sm text-muted">
@@ -475,19 +492,13 @@ function StepConfigure(props: {
           <p className="font-mono text-xs uppercase tracking-widest text-muted">
             Estimated total · {pricing.days} day{pricing.days === 1 ? "" : "s"}
           </p>
-          <p className="mt-1 font-display text-3xl font-bold">
-            {formatCents(pricing.totalCents)}
-          </p>
+          <p className="mt-1 font-display text-3xl font-bold">{formatCents(pricing.totalCents)}</p>
         </div>
       )}
 
       <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={loading || !equipmentId}
-          className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-        >
+        <button type="button" onClick={onNext} disabled={loading || !equipmentId}
+          className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
           {loading ? "Checking availability…" : "Next: your info →"}
         </button>
       </div>
@@ -522,63 +533,37 @@ function StepCustomer(props: {
         <p className="mt-1 text-sm text-muted">All fields required.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="First name *">
-            <input
-              type="text"
-              value={customer.first_name}
+            <input type="text" value={customer.first_name}
               onChange={(e) => updateCustomer("first_name", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-              required
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
           </Field>
           <Field label="Last name *">
-            <input
-              type="text"
-              value={customer.last_name}
+            <input type="text" value={customer.last_name}
               onChange={(e) => updateCustomer("last_name", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-              required
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
           </Field>
           <Field label="Email *">
-            <input
-              type="email"
-              value={customer.email}
+            <input type="email" value={customer.email}
               onChange={(e) => updateCustomer("email", e.target.value)}
               onBlur={(e) => onEmailBlur(e.target.value.trim().toLowerCase())}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-              required
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
           </Field>
           <Field label="Phone *">
-            <input
-              type="tel"
-              value={customer.phone}
+            <input type="tel" value={customer.phone}
               onChange={(e) => updateCustomer("phone", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-              required
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
           </Field>
         </div>
       </div>
 
       <div>
         <h2 className="font-display text-2xl font-semibold">Driver&rsquo;s license</h2>
-        <p className="mt-1 text-sm text-muted">
-          Photo or PDF, both sides. Max 10 MB each.
-        </p>
+        <p className="mt-1 text-sm text-muted">Photo or PDF, both sides. Max 10 MB each.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <DLUpload
-            label="Front *"
-            uploaded={!!customer.drivers_license_front_path}
-            uploading={uploadingFront}
-            onChange={onDLFrontChange}
-          />
-          <DLUpload
-            label="Back *"
-            uploaded={!!customer.drivers_license_back_path}
-            uploading={uploadingBack}
-            onChange={onDLBackChange}
-          />
+          <DLUpload label="Front *" uploaded={!!customer.drivers_license_front_path}
+            uploading={uploadingFront} onChange={onDLFrontChange} />
+          <DLUpload label="Back *" uploaded={!!customer.drivers_license_back_path}
+            uploading={uploadingBack} onChange={onDLBackChange} />
         </div>
       </div>
 
@@ -587,65 +572,40 @@ function StepCustomer(props: {
         <p className="mt-1 text-sm text-muted">Where the equipment will be used.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="Address line 1 *" className="sm:col-span-2">
-            <input
-              type="text"
-              value={customer.project_address_line1}
+            <input type="text" value={customer.project_address_line1}
               onChange={(e) => updateCustomer("project_address_line1", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-              required
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
           </Field>
           <Field label="Address line 2 (optional)" className="sm:col-span-2">
-            <input
-              type="text"
-              value={customer.project_address_line2}
+            <input type="text" value={customer.project_address_line2}
               onChange={(e) => updateCustomer("project_address_line2", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
           </Field>
           <Field label="City *">
-            <input
-              type="text"
-              value={customer.project_city}
+            <input type="text" value={customer.project_city}
               onChange={(e) => updateCustomer("project_city", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-              required
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
           </Field>
           <Field label="Province *">
-            <input
-              type="text"
-              value={customer.project_province}
+            <input type="text" value={customer.project_province}
               onChange={(e) => updateCustomer("project_province", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-              required
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
           </Field>
           <Field label="Postal code *">
-            <input
-              type="text"
-              value={customer.project_postal_code}
+            <input type="text" value={customer.project_postal_code}
               onChange={(e) => updateCustomer("project_postal_code", e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-              required
-            />
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
           </Field>
         </div>
       </div>
 
       <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 transition-colors"
-        >
+        <button type="button" onClick={onBack}
+          className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 transition-colors">
           ← Back
         </button>
-        <button
-          type="button"
-          onClick={onNext}
-          className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover transition-colors"
-        >
+        <button type="button" onClick={onNext}
+          className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover transition-colors">
           Next: review →
         </button>
       </div>
@@ -654,24 +614,16 @@ function StepCustomer(props: {
 }
 
 function DLUpload({
-  label,
-  uploaded,
-  uploading,
-  onChange,
+  label, uploaded, uploading, onChange,
 }: {
-  label: string;
-  uploaded: boolean;
-  uploading: boolean;
+  label: string; uploaded: boolean; uploading: boolean;
   onChange: (file: File | null) => void;
 }) {
   return (
     <Field label={label}>
-      <input
-        type="file"
-        accept="image/*,application/pdf"
+      <input type="file" accept="image/*,application/pdf"
         onChange={(e) => onChange(e.target.files?.[0] ?? null)}
-        className="mt-1 w-full text-sm"
-      />
+        className="mt-1 w-full text-sm" />
       {uploading && <p className="mt-1 text-xs text-muted">Uploading…</p>}
       {uploaded && !uploading && (
         <p className="mt-1 font-mono text-xs text-muted">✓ Uploaded</p>
@@ -680,14 +632,8 @@ function DLUpload({
   );
 }
 
-function Field({
-  label,
-  className = "",
-  children,
-}: {
-  label: string;
-  className?: string;
-  children: React.ReactNode;
+function Field({ label, className = "", children }: {
+  label: string; className?: string; children: React.ReactNode;
 }) {
   return (
     <label className={`block ${className}`}>
@@ -710,13 +656,13 @@ function StepReview(props: {
   setSpecialInstructions: (s: string) => void;
   pricing: ReturnType<typeof calculatePricing>;
   onBack: () => void;
-  onSubmit: () => void;
+  onNext: () => void;
   submitting: boolean;
 }) {
   const {
     equipment, startDate, endDate, dropoffTime, addons, customer,
     specialInstructions, setSpecialInstructions, pricing,
-    onBack, onSubmit, submitting,
+    onBack, onNext, submitting,
   } = props;
 
   return (
@@ -756,8 +702,7 @@ function StepReview(props: {
             {customer.project_address_line2 && <p>{customer.project_address_line2}</p>}
             <p>
               {[customer.project_city, customer.project_province, customer.project_postal_code]
-                .filter(Boolean)
-                .join(", ")}
+                .filter(Boolean).join(", ")}
             </p>
           </SummaryBlock>
         </div>
@@ -766,13 +711,10 @@ function StepReview(props: {
       <div>
         <label className="block">
           <span className="block text-sm font-medium">Special instructions (optional)</span>
-          <textarea
-            value={specialInstructions}
+          <textarea value={specialInstructions} rows={3}
             onChange={(e) => setSpecialInstructions(e.target.value)}
-            rows={3}
             className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
-            placeholder="Gate code, contact on site, etc."
-          />
+            placeholder="Gate code, contact on site, etc." />
         </label>
       </div>
 
@@ -791,26 +733,16 @@ function StepReview(props: {
           <span>Total</span>
           <span>{formatCents(pricing.totalCents)}</span>
         </div>
-        <p className="text-xs text-muted">
-          Signature and payment come next (Phases 3–4). For now, submitting holds the dates.
-        </p>
       </div>
 
       <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 transition-colors"
-        >
+        <button type="button" onClick={onBack}
+          className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 transition-colors">
           ← Back
         </button>
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={submitting}
-          className="rounded-full bg-accent px-8 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-        >
-          {submitting ? "Submitting…" : "Confirm booking →"}
+        <button type="button" onClick={onNext} disabled={submitting}
+          className="rounded-full bg-accent px-8 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
+          {submitting ? "Saving booking…" : "Continue to payment →"}
         </button>
       </div>
     </section>
@@ -818,18 +750,97 @@ function StepReview(props: {
 }
 
 function SummaryBlock({
-  title,
-  className = "",
-  children,
+  title, className = "", children,
 }: {
-  title: string;
-  className?: string;
-  children: React.ReactNode;
+  title: string; className?: string; children: React.ReactNode;
 }) {
   return (
     <div className={`rounded-2xl border border-ink/10 p-4 ${className}`}>
       <p className="font-mono text-xs uppercase tracking-widest text-muted">{title}</p>
       <div className="mt-2">{children}</div>
     </div>
+  );
+}
+
+// --- Step 4 -----------------------------------------------------------------
+
+function StepPay({
+  totalCents, applicationId, locationId, paying,
+  onPaymentToken, onBack,
+}: {
+  totalCents: number;
+  applicationId: string;
+  locationId: string;
+  paying: boolean;
+  onPaymentToken: (sourceId: string) => void;
+  onBack: () => void;
+}) {
+  if (!applicationId || !locationId) {
+    return (
+      <section className="rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900">
+        <p className="font-medium">Square is not configured for this environment.</p>
+        <p className="mt-1">
+          The site is missing <code>NEXT_PUBLIC_SQUARE_APPLICATION_ID</code> or{" "}
+          <code>NEXT_PUBLIC_SQUARE_LOCATION_ID</code>. Add them in the Vercel project settings
+          (or your local <code>.env.local</code>) and redeploy.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-6">
+      <div>
+        <h2 className="font-display text-2xl font-semibold">Payment</h2>
+        <p className="mt-1 text-sm text-muted">
+          Card details are tokenized by Square directly — they never touch our servers.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-ink/10 bg-ink/[0.02] p-5">
+        <p className="font-mono text-xs uppercase tracking-widest text-muted">Amount due</p>
+        <p className="mt-1 font-display text-3xl font-bold">{formatCents(totalCents)}</p>
+      </div>
+
+      <div className="rounded-2xl border border-ink/10 p-5">
+        <PaymentForm
+          applicationId={applicationId}
+          locationId={locationId}
+          cardTokenizeResponseReceived={async (tokenResult) => {
+            if (tokenResult.status !== "OK" || !tokenResult.token) return;
+            onPaymentToken(tokenResult.token);
+          }}
+          createPaymentRequest={() => ({
+            countryCode: "CA",
+            currencyCode: "CAD",
+            total: { amount: (totalCents / 100).toFixed(2), label: "Total" },
+          })}
+        >
+          <CreditCard
+            buttonProps={{
+              isLoading: paying,
+              css: {
+                backgroundColor: "var(--color-accent)",
+                fontSize: "16px",
+                fontWeight: 500,
+                "&:hover": { backgroundColor: "var(--color-accent-hover)" },
+              },
+            }}
+          >
+            {paying ? "Processing…" : `Pay ${formatCents(totalCents)}`}
+          </CreditCard>
+        </PaymentForm>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <button type="button" onClick={onBack} disabled={paying}
+          className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 disabled:opacity-50 transition-colors">
+          ← Back
+        </button>
+        <p className="font-mono text-xs text-muted">
+          Sandbox test card: 4111 1111 1111 1111 · any future expiry · CVV 111
+        </p>
+      </div>
+    </section>
   );
 }

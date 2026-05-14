@@ -40,7 +40,8 @@ export default async function ConfirmedPage({
           }.
         </h1>
         <p className="mt-4 text-lg text-ink/80">
-          We&rsquo;ve held your dates. Next, we&rsquo;ll have you sign the rental agreement and pay — coming in Phases 3 and 4 of this build.
+          Payment received and your machine is locked in for the dates below. We&rsquo;ll
+          follow up with the signed rental agreement shortly. A confirmation email is on its way.
         </p>
 
         <div className="mt-10 rounded-2xl border border-ink/10 bg-ink/[0.02] p-6 space-y-3">
@@ -78,7 +79,7 @@ export default async function ConfirmedPage({
         </div>
 
         <p className="mt-8 font-mono text-xs text-muted">
-          A confirmation email is coming once Phase 4 (payments) is live.
+          Keep this booking ID handy in case you need to reach out about your rental.
         </p>
       </div>
     </main>
