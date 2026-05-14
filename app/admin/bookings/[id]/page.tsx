@@ -49,7 +49,7 @@ async function signedDlUrl(path: string | null): Promise<string | null> {
   const supabase = createSupabaseServiceClient();
   const { data } = await supabase.storage
     .from("customer-documents")
-    .createSignedUrl(path, 60 * 30); // 30 min
+    .createSignedUrl(path, 60 * 60 * 24 * 7); // 7 days
   return data?.signedUrl ?? null;
 }
 
@@ -145,12 +145,12 @@ export default async function BookingDetailPage({
           <div className="flex flex-wrap gap-4 text-sm">
             {dlFrontUrl ? (
               <a href={dlFrontUrl} target="_blank" rel="noopener" className="underline text-accent">
-                ↗ Front (30 min link)
+                ↗ Front (7-day link)
               </a>
             ) : <span className="text-muted">No front uploaded</span>}
             {dlBackUrl ? (
               <a href={dlBackUrl} target="_blank" rel="noopener" className="underline text-accent">
-                ↗ Back (30 min link)
+                ↗ Back (7-day link)
               </a>
             ) : <span className="text-muted">No back uploaded</span>}
           </div>
