@@ -116,8 +116,8 @@ begin
     where b.equipment_id = new.equipment_id
       and b.id <> new.id
       and b.status <> 'canceled'
-      and daterange(b.start_date, b.end_date + interval '1 day', '[]')
-          && daterange(new.start_date, new.end_date + interval '1 day', '[]')
+      and daterange(b.start_date, b.end_date + 1, '[]')
+          && daterange(new.start_date, new.end_date + 1, '[]')
   ) then
     raise exception 'Booking conflicts with existing reservation on this equipment'
       using errcode = 'check_violation';
