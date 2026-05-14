@@ -72,15 +72,17 @@ export async function POST(req: Request) {
     .from("customers")
     .upsert(
       {
-        name: customer.name,
+        first_name: customer.first_name,
+        last_name: customer.last_name,
         email: customer.email,
         phone: customer.phone,
-        drivers_license_url: customer.drivers_license_path ?? null,
-        project_address_line1: customer.project_address_line1 ?? null,
+        drivers_license_front_url: customer.drivers_license_front_path,
+        drivers_license_back_url: customer.drivers_license_back_path,
+        project_address_line1: customer.project_address_line1,
         project_address_line2: customer.project_address_line2 ?? null,
-        project_city: customer.project_city ?? null,
-        project_province: customer.project_province ?? null,
-        project_postal_code: customer.project_postal_code ?? null,
+        project_city: customer.project_city,
+        project_province: customer.project_province,
+        project_postal_code: customer.project_postal_code,
       },
       { onConflict: "email" },
     )
@@ -101,7 +103,7 @@ export async function POST(req: Request) {
       equipment_id: booking.equipment_id,
       start_date: booking.start_date,
       end_date: booking.end_date,
-      dropoff_time: booking.dropoff_time ?? null,
+      dropoff_time: booking.dropoff_time,
       special_instructions: booking.special_instructions ?? null,
       status: "pending_payment",
       total_cents: pricing.totalCents,

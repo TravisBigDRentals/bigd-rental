@@ -6,12 +6,15 @@ import type { Addon, Equipment } from "@/lib/bookings/queries";
 import { calculatePricing, formatCents } from "@/lib/pricing";
 
 type Step = 1 | 2 | 3;
+type DropoffTime = "9:00 AM" | "10:00 AM";
 
 type CustomerState = {
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   phone: string;
-  drivers_license_path: string | null;
+  drivers_license_front_path: string | null;
+  drivers_license_back_path: string | null;
   project_address_line1: string;
   project_address_line2: string;
   project_city: string;
@@ -20,10 +23,12 @@ type CustomerState = {
 };
 
 const EMPTY_CUSTOMER: CustomerState = {
-  name: "",
+  first_name: "",
+  last_name: "",
   email: "",
   phone: "",
-  drivers_license_path: null,
+  drivers_license_front_path: null,
+  drivers_license_back_path: null,
   project_address_line1: "",
   project_address_line2: "",
   project_city: "Calgary",
@@ -47,13 +52,14 @@ export function BookingForm({
   const [equipmentId, setEquipmentId] = useState<string>("");
   const [startDate, setStartDate] = useState<string>(todayISO());
   const [endDate, setEndDate] = useState<string>(todayISO());
-  const [dropoffTime, setDropoffTime] = useState<string>("9:00 AM");
+  const [dropoffTime, setDropoffTime] = useState<DropoffTime>("9:00 AM");
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [customer, setCustomer] = useState<CustomerState>(EMPTY_CUSTOMER);
   const [specialInstructions, setSpecialInstructions] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
-  const [uploadingDL, setUploadingDL] = useState(false);
+  const [uploadingFront, setUploadingFront] = useState(false);
+  const [uploadingBack, setUploadingBack] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const selectedEquipment = useMemo(
@@ -103,7 +109,8 @@ export function BookingForm({
       if (json.found && json.customer) {
         setCustomer((prev) => ({
           ...prev,
-          name: json.customer.name ?? prev.name,
+          first_name: json.customer.first_name ?? prev.first_name,
+          last_name: json.customer.last_name ?? prev.last_name,
           phone: json.customer.phone ?? prev.phone,
           project_address_line1: json.customer.project_address_line1 ?? prev.project_address_line1,
           project_address_line2: json.customer.project_address_line2 ?? prev.project_address_line2,
@@ -117,9 +124,10 @@ export function BookingForm({
     }
   }
 
-  async function handleDLChange(file: File | null) {
+  async function uploadDL(file: File | null, side: "front" | "back") {
     if (!file) return;
-    setUploadingDL(true);
+    const setLoading = side === "front" ? setUploadingFront : setUploadingBack;
+    setLoading(true);
     setError(null);
     try {
       const fd = new FormData();
@@ -130,9 +138,10 @@ export function BookingForm({
         setError(json.error ?? "Upload failed");
         return;
       }
-      updateCustomer("drivers_license_path", json.path);
+      if (side === "front") updateCustomer("drivers_license_front_path", json.path);
+      else updateCustomer("drivers_license_back_path", json.path);
     } finally {
-      setUploadingDL(false);
+      setLoading(false);
     }
   }
 
@@ -179,10 +188,16 @@ export function BookingForm({
 
   function goToStep3() {
     setError(null);
-    if (!customer.name.trim()) return setError("Name is required");
+    if (!customer.first_name.trim()) return setError("First name is required");
+    if (!customer.last_name.trim()) return setError("Last name is required");
     if (!customer.email.trim()) return setError("Email is required");
     if (!customer.phone.trim()) return setError("Phone is required");
-    if (!customer.drivers_license_path) return setError("Driver's license upload is required");
+    if (!customer.drivers_license_front_path) return setError("Driver's license (front) is required");
+    if (!customer.drivers_license_back_path) return setError("Driver's license (back) is required");
+    if (!customer.project_address_line1.trim()) return setError("Project address is required");
+    if (!customer.project_city.trim()) return setError("City is required");
+    if (!customer.project_province.trim()) return setError("Province is required");
+    if (!customer.project_postal_code.trim()) return setError("Postal code is required");
     setStep(3);
   }
 
@@ -195,21 +210,23 @@ export function BookingForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customer: {
-            name: customer.name.trim(),
+            first_name: customer.first_name.trim(),
+            last_name: customer.last_name.trim(),
             email: customer.email.trim().toLowerCase(),
             phone: customer.phone.trim(),
-            drivers_license_path: customer.drivers_license_path,
-            project_address_line1: customer.project_address_line1.trim() || null,
+            drivers_license_front_path: customer.drivers_license_front_path,
+            drivers_license_back_path: customer.drivers_license_back_path,
+            project_address_line1: customer.project_address_line1.trim(),
             project_address_line2: customer.project_address_line2.trim() || null,
-            project_city: customer.project_city.trim() || null,
-            project_province: customer.project_province.trim() || null,
-            project_postal_code: customer.project_postal_code.trim() || null,
+            project_city: customer.project_city.trim(),
+            project_province: customer.project_province.trim(),
+            project_postal_code: customer.project_postal_code.trim(),
           },
           booking: {
             equipment_id: equipmentId,
             start_date: startDate,
             end_date: endDate,
-            dropoff_time: dropoffTime || null,
+            dropoff_time: dropoffTime,
             special_instructions: specialInstructions.trim() || null,
             addon_ids: addonIds,
           },
@@ -264,8 +281,10 @@ export function BookingForm({
           customer={customer}
           updateCustomer={updateCustomer}
           onEmailBlur={lookupReturningCustomer}
-          onDLChange={handleDLChange}
-          uploadingDL={uploadingDL}
+          onDLFrontChange={(f) => uploadDL(f, "front")}
+          onDLBackChange={(f) => uploadDL(f, "back")}
+          uploadingFront={uploadingFront}
+          uploadingBack={uploadingBack}
           onBack={() => setStep(1)}
           onNext={goToStep3}
         />
@@ -331,8 +350,8 @@ function StepConfigure(props: {
   setStartDate: (d: string) => void;
   endDate: string;
   setEndDate: (d: string) => void;
-  dropoffTime: string;
-  setDropoffTime: (t: string) => void;
+  dropoffTime: DropoffTime;
+  setDropoffTime: (t: DropoffTime) => void;
   compatibleAddons: Addon[];
   addonIds: string[];
   toggleAddon: (id: string) => void;
@@ -405,12 +424,11 @@ function StepConfigure(props: {
             <span className="block text-sm font-medium">Drop-off time</span>
             <select
               value={dropoffTime}
-              onChange={(e) => setDropoffTime(e.target.value)}
+              onChange={(e) => setDropoffTime(e.target.value as DropoffTime)}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
             >
-              {["7:00 AM", "8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM"].map((t) => (
-                <option key={t}>{t}</option>
-              ))}
+              <option>9:00 AM</option>
+              <option>10:00 AM</option>
             </select>
           </label>
         </div>
@@ -483,28 +501,45 @@ function StepCustomer(props: {
   customer: CustomerState;
   updateCustomer: <K extends keyof CustomerState>(key: K, value: CustomerState[K]) => void;
   onEmailBlur: (email: string) => void;
-  onDLChange: (file: File | null) => void;
-  uploadingDL: boolean;
+  onDLFrontChange: (file: File | null) => void;
+  onDLBackChange: (file: File | null) => void;
+  uploadingFront: boolean;
+  uploadingBack: boolean;
   onBack: () => void;
   onNext: () => void;
 }) {
-  const { customer, updateCustomer, onEmailBlur, onDLChange, uploadingDL, onBack, onNext } = props;
+  const {
+    customer, updateCustomer, onEmailBlur,
+    onDLFrontChange, onDLBackChange,
+    uploadingFront, uploadingBack,
+    onBack, onNext,
+  } = props;
 
   return (
     <section className="space-y-8">
       <div>
         <h2 className="font-display text-2xl font-semibold">Your info</h2>
+        <p className="mt-1 text-sm text-muted">All fields required.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Field label="Full name">
+          <Field label="First name *">
             <input
               type="text"
-              value={customer.name}
-              onChange={(e) => updateCustomer("name", e.target.value)}
+              value={customer.first_name}
+              onChange={(e) => updateCustomer("first_name", e.target.value)}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
               required
             />
           </Field>
-          <Field label="Email">
+          <Field label="Last name *">
+            <input
+              type="text"
+              value={customer.last_name}
+              onChange={(e) => updateCustomer("last_name", e.target.value)}
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
+              required
+            />
+          </Field>
+          <Field label="Email *">
             <input
               type="email"
               value={customer.email}
@@ -514,7 +549,7 @@ function StepCustomer(props: {
               required
             />
           </Field>
-          <Field label="Phone">
+          <Field label="Phone *">
             <input
               type="tel"
               value={customer.phone}
@@ -523,31 +558,41 @@ function StepCustomer(props: {
               required
             />
           </Field>
-          <Field label="Driver's license">
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => onDLChange(e.target.files?.[0] ?? null)}
-              className="mt-1 w-full text-sm"
-            />
-            {uploadingDL && <p className="mt-1 text-xs text-muted">Uploading…</p>}
-            {customer.drivers_license_path && !uploadingDL && (
-              <p className="mt-1 font-mono text-xs text-muted">✓ Uploaded</p>
-            )}
-          </Field>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="font-display text-2xl font-semibold">Driver&rsquo;s license</h2>
+        <p className="mt-1 text-sm text-muted">
+          Photo or PDF, both sides. Max 10 MB each.
+        </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <DLUpload
+            label="Front *"
+            uploaded={!!customer.drivers_license_front_path}
+            uploading={uploadingFront}
+            onChange={onDLFrontChange}
+          />
+          <DLUpload
+            label="Back *"
+            uploaded={!!customer.drivers_license_back_path}
+            uploading={uploadingBack}
+            onChange={onDLBackChange}
+          />
         </div>
       </div>
 
       <div>
         <h2 className="font-display text-2xl font-semibold">Project address</h2>
-        <p className="mt-1 text-sm text-muted">Where will the equipment be used?</p>
+        <p className="mt-1 text-sm text-muted">Where the equipment will be used.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Field label="Address line 1" className="sm:col-span-2">
+          <Field label="Address line 1 *" className="sm:col-span-2">
             <input
               type="text"
               value={customer.project_address_line1}
               onChange={(e) => updateCustomer("project_address_line1", e.target.value)}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
+              required
             />
           </Field>
           <Field label="Address line 2 (optional)" className="sm:col-span-2">
@@ -558,28 +603,31 @@ function StepCustomer(props: {
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
             />
           </Field>
-          <Field label="City">
+          <Field label="City *">
             <input
               type="text"
               value={customer.project_city}
               onChange={(e) => updateCustomer("project_city", e.target.value)}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
+              required
             />
           </Field>
-          <Field label="Province">
+          <Field label="Province *">
             <input
               type="text"
               value={customer.project_province}
               onChange={(e) => updateCustomer("project_province", e.target.value)}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
+              required
             />
           </Field>
-          <Field label="Postal code">
+          <Field label="Postal code *">
             <input
               type="text"
               value={customer.project_postal_code}
               onChange={(e) => updateCustomer("project_postal_code", e.target.value)}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
+              required
             />
           </Field>
         </div>
@@ -602,6 +650,33 @@ function StepCustomer(props: {
         </button>
       </div>
     </section>
+  );
+}
+
+function DLUpload({
+  label,
+  uploaded,
+  uploading,
+  onChange,
+}: {
+  label: string;
+  uploaded: boolean;
+  uploading: boolean;
+  onChange: (file: File | null) => void;
+}) {
+  return (
+    <Field label={label}>
+      <input
+        type="file"
+        accept="image/*,application/pdf"
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        className="mt-1 w-full text-sm"
+      />
+      {uploading && <p className="mt-1 text-xs text-muted">Uploading…</p>}
+      {uploaded && !uploading && (
+        <p className="mt-1 font-mono text-xs text-muted">✓ Uploaded</p>
+      )}
+    </Field>
   );
 }
 
@@ -628,7 +703,7 @@ function StepReview(props: {
   equipment: Equipment;
   startDate: string;
   endDate: string;
-  dropoffTime: string;
+  dropoffTime: DropoffTime;
   addons: Addon[];
   customer: CustomerState;
   specialInstructions: string;
@@ -672,21 +747,19 @@ function StepReview(props: {
             </SummaryBlock>
           )}
           <SummaryBlock title="Contact" className="sm:col-span-2">
-            <p>{customer.name}</p>
+            <p>{customer.first_name} {customer.last_name}</p>
             <p className="text-sm text-muted">{customer.email}</p>
             <p className="text-sm text-muted">{customer.phone}</p>
           </SummaryBlock>
-          {customer.project_address_line1 && (
-            <SummaryBlock title="Project address" className="sm:col-span-2">
-              <p>{customer.project_address_line1}</p>
-              {customer.project_address_line2 && <p>{customer.project_address_line2}</p>}
-              <p>
-                {[customer.project_city, customer.project_province, customer.project_postal_code]
-                  .filter(Boolean)
-                  .join(", ")}
-              </p>
-            </SummaryBlock>
-          )}
+          <SummaryBlock title="Project address" className="sm:col-span-2">
+            <p>{customer.project_address_line1}</p>
+            {customer.project_address_line2 && <p>{customer.project_address_line2}</p>}
+            <p>
+              {[customer.project_city, customer.project_province, customer.project_postal_code]
+                .filter(Boolean)
+                .join(", ")}
+            </p>
+          </SummaryBlock>
         </div>
       </div>
 

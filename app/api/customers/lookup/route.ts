@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   let query = supabase
     .from("customers")
     .select(
-      "name, email, phone, project_address_line1, project_address_line2, project_city, project_province, project_postal_code",
+      "first_name, last_name, email, phone, project_address_line1, project_address_line2, project_city, project_province, project_postal_code",
     )
     .limit(1);
   if (email) query = query.eq("email", email);

@@ -21,15 +21,17 @@ create type booking_status as enum (
 
 create table customers (
   id uuid primary key default gen_random_uuid(),
-  name text not null,
+  first_name text not null,
+  last_name text not null,
   email text not null unique,
   phone text not null,
-  drivers_license_url text,
-  project_address_line1 text,
+  drivers_license_front_url text not null,
+  drivers_license_back_url text not null,
+  project_address_line1 text not null,
   project_address_line2 text,
-  project_city text,
-  project_province text,
-  project_postal_code text,
+  project_city text not null,
+  project_province text not null,
+  project_postal_code text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

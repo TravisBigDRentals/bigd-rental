@@ -20,7 +20,7 @@ export default async function ConfirmedPage({
     .select(`
       id, start_date, end_date, dropoff_time, total_cents, status,
       equipment:equipment_id ( name, serial ),
-      customer:customer_id ( name, email )
+      customer:customer_id ( first_name, last_name, email )
     `)
     .eq("id", id)
     .single();
@@ -36,7 +36,7 @@ export default async function ConfirmedPage({
         <h1 className="mt-2 font-display text-4xl sm:text-5xl font-bold tracking-tight">
           Thanks{
             // @ts-expect-error Supabase nested-select returns object, not array
-            booking.customer?.name ? `, ${booking.customer.name.split(" ")[0]}` : ""
+            booking.customer?.first_name ? `, ${booking.customer.first_name}` : ""
           }.
         </h1>
         <p className="mt-4 text-lg text-ink/80">

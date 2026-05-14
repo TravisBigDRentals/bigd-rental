@@ -10,15 +10,17 @@ export const availabilityQuery = z.object({
 export type AvailabilityQuery = z.infer<typeof availabilityQuery>;
 
 export const customerInput = z.object({
-  name: z.string().min(1).max(120),
+  first_name: z.string().min(1).max(60),
+  last_name: z.string().min(1).max(60),
   email: z.string().email(),
   phone: z.string().min(7).max(40),
-  drivers_license_path: z.string().nullable().optional(),
-  project_address_line1: z.string().nullable().optional(),
+  drivers_license_front_path: z.string().min(1),
+  drivers_license_back_path: z.string().min(1),
+  project_address_line1: z.string().min(1),
   project_address_line2: z.string().nullable().optional(),
-  project_city: z.string().nullable().optional(),
-  project_province: z.string().nullable().optional(),
-  project_postal_code: z.string().nullable().optional(),
+  project_city: z.string().min(1),
+  project_province: z.string().min(1),
+  project_postal_code: z.string().min(1),
 });
 export type CustomerInput = z.infer<typeof customerInput>;
 
@@ -28,7 +30,7 @@ export const createBookingInput = z.object({
     equipment_id: z.string().uuid(),
     start_date: dateString,
     end_date: dateString,
-    dropoff_time: z.string().nullable().optional(),
+    dropoff_time: z.enum(["9:00 AM", "10:00 AM"]),
     special_instructions: z.string().nullable().optional(),
     addon_ids: z.array(z.string().uuid()).default([]),
   }),
