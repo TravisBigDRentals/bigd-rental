@@ -23,10 +23,18 @@ create table customers (
   id uuid primary key default gen_random_uuid(),
   first_name text not null,
   last_name text not null,
+  business_name text,
   email text not null unique,
   phone text not null,
   drivers_license_front_url text not null,
   drivers_license_back_url text not null,
+  -- Customer's home / HQ address
+  customer_address_line1 text not null,
+  customer_address_line2 text,
+  customer_city text not null,
+  customer_province text not null,
+  customer_postal_code text not null,
+  -- Project address (job site, can differ from customer address)
   project_address_line1 text not null,
   project_address_line2 text,
   project_city text not null,

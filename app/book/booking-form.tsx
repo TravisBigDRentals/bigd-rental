@@ -12,10 +12,16 @@ type DropoffTime = "9:00 AM" | "10:00 AM";
 type CustomerState = {
   first_name: string;
   last_name: string;
+  business_name: string;
   email: string;
   phone: string;
   drivers_license_front_path: string | null;
   drivers_license_back_path: string | null;
+  customer_address_line1: string;
+  customer_address_line2: string;
+  customer_city: string;
+  customer_province: string;
+  customer_postal_code: string;
   project_address_line1: string;
   project_address_line2: string;
   project_city: string;
@@ -26,10 +32,16 @@ type CustomerState = {
 const EMPTY_CUSTOMER: CustomerState = {
   first_name: "",
   last_name: "",
+  business_name: "",
   email: "",
   phone: "",
   drivers_license_front_path: null,
   drivers_license_back_path: null,
+  customer_address_line1: "",
+  customer_address_line2: "",
+  customer_city: "Calgary",
+  customer_province: "AB",
+  customer_postal_code: "",
   project_address_line1: "",
   project_address_line2: "",
   project_city: "Calgary",
@@ -42,6 +54,22 @@ const SQUARE_LOC_ID = process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID ?? "";
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function addOneDay(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function formatLongDate(iso: string): string {
+  if (!iso) return "";
+  return new Date(iso + "T00:00:00").toLocaleDateString("en-CA", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 export function BookingForm({
@@ -99,6 +127,8 @@ export function BookingForm({
     });
   }, [selectedEquipment, selectedAddons, startDate, endDate]);
 
+  const pickupDateISO = useMemo(() => addOneDay(endDate), [endDate]);
+
   function toggleAddon(id: string) {
     setAddonIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
@@ -117,7 +147,13 @@ export function BookingForm({
           ...prev,
           first_name: json.customer.first_name ?? prev.first_name,
           last_name: json.customer.last_name ?? prev.last_name,
+          business_name: json.customer.business_name ?? prev.business_name,
           phone: json.customer.phone ?? prev.phone,
+          customer_address_line1: json.customer.customer_address_line1 ?? prev.customer_address_line1,
+          customer_address_line2: json.customer.customer_address_line2 ?? prev.customer_address_line2,
+          customer_city: json.customer.customer_city ?? prev.customer_city,
+          customer_province: json.customer.customer_province ?? prev.customer_province,
+          customer_postal_code: json.customer.customer_postal_code ?? prev.customer_postal_code,
           project_address_line1: json.customer.project_address_line1 ?? prev.project_address_line1,
           project_address_line2: json.customer.project_address_line2 ?? prev.project_address_line2,
           project_city: json.customer.project_city ?? prev.project_city,
@@ -185,22 +221,23 @@ export function BookingForm({
     if (!customer.phone.trim()) return setError("Phone is required");
     if (!customer.drivers_license_front_path) return setError("Driver's license (front) is required");
     if (!customer.drivers_license_back_path) return setError("Driver's license (back) is required");
+    if (!customer.customer_address_line1.trim()) return setError("Customer address is required");
+    if (!customer.customer_city.trim()) return setError("Customer city is required");
+    if (!customer.customer_province.trim()) return setError("Customer province is required");
+    if (!customer.customer_postal_code.trim()) return setError("Customer postal code is required");
     if (!customer.project_address_line1.trim()) return setError("Project address is required");
-    if (!customer.project_city.trim()) return setError("City is required");
-    if (!customer.project_province.trim()) return setError("Province is required");
-    if (!customer.project_postal_code.trim()) return setError("Postal code is required");
+    if (!customer.project_city.trim()) return setError("Project city is required");
+    if (!customer.project_province.trim()) return setError("Project province is required");
+    if (!customer.project_postal_code.trim()) return setError("Project postal code is required");
     setStep(3);
   }
 
   async function createBookingAndAdvanceToPay() {
     setError(null);
-
-    // If user came back from step 4, booking already exists — skip re-create
     if (bookingId) {
       setStep(4);
       return;
     }
-
     setCreatingBooking(true);
     try {
       const res = await fetch("/api/bookings/create", {
@@ -210,10 +247,16 @@ export function BookingForm({
           customer: {
             first_name: customer.first_name.trim(),
             last_name: customer.last_name.trim(),
+            business_name: customer.business_name.trim() || null,
             email: customer.email.trim().toLowerCase(),
             phone: customer.phone.trim(),
             drivers_license_front_path: customer.drivers_license_front_path,
             drivers_license_back_path: customer.drivers_license_back_path,
+            customer_address_line1: customer.customer_address_line1.trim(),
+            customer_address_line2: customer.customer_address_line2.trim() || null,
+            customer_city: customer.customer_city.trim(),
+            customer_province: customer.customer_province.trim(),
+            customer_postal_code: customer.customer_postal_code.trim(),
             project_address_line1: customer.project_address_line1.trim(),
             project_address_line2: customer.project_address_line2.trim() || null,
             project_city: customer.project_city.trim(),
@@ -280,65 +323,48 @@ export function BookingForm({
         <StepConfigure
           equipment={equipment}
           equipmentId={equipmentId}
-          setEquipmentId={(id) => {
-            setEquipmentId(id);
-            setAddonIds([]);
-          }}
-          startDate={startDate}
-          setStartDate={setStartDate}
-          endDate={endDate}
-          setEndDate={setEndDate}
-          dropoffTime={dropoffTime}
-          setDropoffTime={setDropoffTime}
+          setEquipmentId={(id) => { setEquipmentId(id); setAddonIds([]); }}
+          startDate={startDate} setStartDate={setStartDate}
+          endDate={endDate} setEndDate={setEndDate}
+          pickupDate={pickupDateISO}
+          dropoffTime={dropoffTime} setDropoffTime={setDropoffTime}
           compatibleAddons={compatibleAddons}
-          addonIds={addonIds}
-          toggleAddon={toggleAddon}
+          addonIds={addonIds} toggleAddon={toggleAddon}
           pricing={pricing}
-          onNext={goToStep2}
-          loading={checkingAvailability}
+          onNext={goToStep2} loading={checkingAvailability}
         />
       )}
 
       {step === 2 && (
         <StepCustomer
-          customer={customer}
-          updateCustomer={updateCustomer}
+          customer={customer} updateCustomer={updateCustomer}
           onEmailBlur={lookupReturningCustomer}
           onDLFrontChange={(f) => uploadDL(f, "front")}
           onDLBackChange={(f) => uploadDL(f, "back")}
-          uploadingFront={uploadingFront}
-          uploadingBack={uploadingBack}
-          onBack={() => setStep(1)}
-          onNext={goToStep3}
+          uploadingFront={uploadingFront} uploadingBack={uploadingBack}
+          onBack={() => setStep(1)} onNext={goToStep3}
         />
       )}
 
       {step === 3 && pricing && selectedEquipment && (
         <StepReview
           equipment={selectedEquipment}
-          startDate={startDate}
-          endDate={endDate}
-          dropoffTime={dropoffTime}
-          addons={selectedAddons}
+          startDate={startDate} endDate={endDate} pickupDate={pickupDateISO}
+          dropoffTime={dropoffTime} addons={selectedAddons}
           customer={customer}
           specialInstructions={specialInstructions}
           setSpecialInstructions={setSpecialInstructions}
           pricing={pricing}
-          onBack={() => setStep(2)}
-          onNext={createBookingAndAdvanceToPay}
+          onBack={() => setStep(2)} onNext={createBookingAndAdvanceToPay}
           submitting={creatingBooking}
         />
       )}
 
       {step === 4 && pricing && (
-        <StepPay
-          totalCents={pricing.totalCents}
-          applicationId={SQUARE_APP_ID}
-          locationId={SQUARE_LOC_ID}
-          paying={paying}
-          onPaymentToken={handlePaymentToken}
-          onBack={() => setStep(3)}
-        />
+        <StepPay totalCents={pricing.totalCents}
+          applicationId={SQUARE_APP_ID} locationId={SQUARE_LOC_ID}
+          paying={paying} onPaymentToken={handlePaymentToken}
+          onBack={() => setStep(3)} />
       )}
     </div>
   );
@@ -354,15 +380,11 @@ function StepIndicator({ step }: { step: Step }) {
         const done = step > n;
         return (
           <li key={label} className="flex items-center gap-2">
-            <span
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${
-                active
-                  ? "bg-accent text-paper"
-                  : done
-                    ? "bg-ink text-paper"
-                    : "border border-ink/20 text-muted"
-              }`}
-            >
+            <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${
+              active ? "bg-accent text-paper"
+                : done ? "bg-ink text-paper"
+                : "border border-ink/20 text-muted"
+            }`}>
               {done ? "✓" : n}
             </span>
             <span className={active || done ? "text-ink" : "text-muted"}>{label}</span>
@@ -374,28 +396,24 @@ function StepIndicator({ step }: { step: Step }) {
   );
 }
 
-// --- Step 1 -----------------------------------------------------------------
+// --- Step 1: Configure ------------------------------------------------------
 
 function StepConfigure(props: {
   equipment: Equipment[];
   equipmentId: string;
   setEquipmentId: (id: string) => void;
-  startDate: string;
-  setStartDate: (d: string) => void;
-  endDate: string;
-  setEndDate: (d: string) => void;
-  dropoffTime: DropoffTime;
-  setDropoffTime: (t: DropoffTime) => void;
+  startDate: string; setStartDate: (d: string) => void;
+  endDate: string; setEndDate: (d: string) => void;
+  pickupDate: string;
+  dropoffTime: DropoffTime; setDropoffTime: (t: DropoffTime) => void;
   compatibleAddons: Addon[];
-  addonIds: string[];
-  toggleAddon: (id: string) => void;
+  addonIds: string[]; toggleAddon: (id: string) => void;
   pricing: ReturnType<typeof calculatePricing> | null;
-  onNext: () => void;
-  loading: boolean;
+  onNext: () => void; loading: boolean;
 }) {
   const {
     equipment, equipmentId, setEquipmentId,
-    startDate, setStartDate, endDate, setEndDate,
+    startDate, setStartDate, endDate, setEndDate, pickupDate,
     dropoffTime, setDropoffTime,
     compatibleAddons, addonIds, toggleAddon,
     pricing, onNext, loading,
@@ -409,14 +427,10 @@ function StepConfigure(props: {
           {equipment.map((eq) => {
             const selected = equipmentId === eq.id;
             return (
-              <button
-                key={eq.id}
-                type="button"
-                onClick={() => setEquipmentId(eq.id)}
+              <button key={eq.id} type="button" onClick={() => setEquipmentId(eq.id)}
                 className={`text-left rounded-2xl border p-5 transition-colors ${
                   selected ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30 bg-paper"
-                }`}
-              >
+                }`}>
                 <p className="font-display text-lg font-semibold">{eq.name}</p>
                 <p className="mt-1 font-mono text-xs text-muted">{eq.serial}</p>
                 <p className="mt-3 text-sm">
@@ -433,7 +447,7 @@ function StepConfigure(props: {
         <h2 className="font-display text-2xl font-semibold">Rental dates</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <label className="block">
-            <span className="block text-sm font-medium">Start date</span>
+            <span className="block text-sm font-medium">Delivery date</span>
             <input type="date" value={startDate} min={todayISO()}
               onChange={(e) => setStartDate(e.target.value)}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
@@ -454,6 +468,16 @@ function StepConfigure(props: {
             </select>
           </label>
         </div>
+        {pickupDate && (
+          <div className="mt-4 rounded-lg border border-ink/15 bg-ink/[0.03] px-4 py-3 flex items-center gap-3">
+            <span className="text-lg" aria-hidden>📅</span>
+            <p className="text-sm">
+              <span className="text-muted">Equipment pickup: </span>
+              <span className="font-medium">{formatLongDate(pickupDate)}</span>
+              <span className="text-muted"> at {dropoffTime}</span>
+            </p>
+          </div>
+        )}
       </div>
 
       {equipmentId && compatibleAddons.length > 0 && (
@@ -506,7 +530,7 @@ function StepConfigure(props: {
   );
 }
 
-// --- Step 2 -----------------------------------------------------------------
+// --- Step 2: Customer info --------------------------------------------------
 
 function StepCustomer(props: {
   customer: CustomerState;
@@ -527,10 +551,10 @@ function StepCustomer(props: {
   } = props;
 
   return (
-    <section className="space-y-8">
+    <section className="space-y-10">
       <div>
         <h2 className="font-display text-2xl font-semibold">Your info</h2>
-        <p className="mt-1 text-sm text-muted">All fields required.</p>
+        <p className="mt-1 text-sm text-muted">All fields marked * are required.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="First name *">
             <input type="text" value={customer.first_name}
@@ -541,6 +565,12 @@ function StepCustomer(props: {
             <input type="text" value={customer.last_name}
               onChange={(e) => updateCustomer("last_name", e.target.value)}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
+          </Field>
+          <Field label="ATTN / Business (optional)" className="sm:col-span-2">
+            <input type="text" value={customer.business_name}
+              onChange={(e) => updateCustomer("business_name", e.target.value)}
+              placeholder="Smith Excavation Ltd."
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
           </Field>
           <Field label="Email *">
             <input type="email" value={customer.email}
@@ -560,16 +590,48 @@ function StepCustomer(props: {
         <h2 className="font-display text-2xl font-semibold">Driver&rsquo;s license</h2>
         <p className="mt-1 text-sm text-muted">Photo or PDF, both sides. Max 10 MB each.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <DLUpload label="Front *" uploaded={!!customer.drivers_license_front_path}
-            uploading={uploadingFront} onChange={onDLFrontChange} />
-          <DLUpload label="Back *" uploaded={!!customer.drivers_license_back_path}
-            uploading={uploadingBack} onChange={onDLBackChange} />
+          <DLDropZone label="LICENSE FRONT" uploaded={!!customer.drivers_license_front_path}
+            uploading={uploadingFront} onChange={onDLFrontChange} side="Front" />
+          <DLDropZone label="LICENSE BACK" uploaded={!!customer.drivers_license_back_path}
+            uploading={uploadingBack} onChange={onDLBackChange} side="Back" />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="font-display text-2xl font-semibold">Customer address</h2>
+        <p className="mt-1 text-sm text-muted">Your home or business address.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field label="Address line 1 *" className="sm:col-span-2">
+            <input type="text" value={customer.customer_address_line1}
+              onChange={(e) => updateCustomer("customer_address_line1", e.target.value)}
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
+          </Field>
+          <Field label="Address line 2 (optional)" className="sm:col-span-2">
+            <input type="text" value={customer.customer_address_line2}
+              onChange={(e) => updateCustomer("customer_address_line2", e.target.value)}
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
+          </Field>
+          <Field label="City *">
+            <input type="text" value={customer.customer_city}
+              onChange={(e) => updateCustomer("customer_city", e.target.value)}
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
+          </Field>
+          <Field label="Province *">
+            <input type="text" value={customer.customer_province}
+              onChange={(e) => updateCustomer("customer_province", e.target.value)}
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
+          </Field>
+          <Field label="Postal code *">
+            <input type="text" value={customer.customer_postal_code}
+              onChange={(e) => updateCustomer("customer_postal_code", e.target.value)}
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
+          </Field>
         </div>
       </div>
 
       <div>
         <h2 className="font-display text-2xl font-semibold">Project address</h2>
-        <p className="mt-1 text-sm text-muted">Where the equipment will be used.</p>
+        <p className="mt-1 text-sm text-muted">Where the equipment will be used (job site).</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="Address line 1 *" className="sm:col-span-2">
             <input type="text" value={customer.project_address_line1}
@@ -613,22 +675,43 @@ function StepCustomer(props: {
   );
 }
 
-function DLUpload({
-  label, uploaded, uploading, onChange,
+function DLDropZone({
+  label, side, uploaded, uploading, onChange,
 }: {
-  label: string; uploaded: boolean; uploading: boolean;
+  label: string; side: string;
+  uploaded: boolean; uploading: boolean;
   onChange: (file: File | null) => void;
 }) {
   return (
-    <Field label={label}>
-      <input type="file" accept="image/*,application/pdf"
-        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
-        className="mt-1 w-full text-sm" />
-      {uploading && <p className="mt-1 text-xs text-muted">Uploading…</p>}
-      {uploaded && !uploading && (
-        <p className="mt-1 font-mono text-xs text-muted">✓ Uploaded</p>
-      )}
-    </Field>
+    <div>
+      <p className="font-mono text-xs uppercase tracking-widest text-muted">{label} *</p>
+      <label className={`mt-2 flex h-32 flex-col items-center justify-center rounded-2xl border-2 border-dashed cursor-pointer transition-colors ${
+        uploaded
+          ? "border-accent bg-accent/5"
+          : "border-ink/20 hover:border-accent/60 hover:bg-accent/[0.03]"
+      }`}>
+        <input
+          type="file"
+          accept="image/*,application/pdf"
+          className="hidden"
+          onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        />
+        {uploading ? (
+          <p className="text-sm text-muted">Uploading…</p>
+        ) : uploaded ? (
+          <>
+            <span className="text-2xl text-accent" aria-hidden>✓</span>
+            <p className="mt-1 text-sm font-medium text-accent">Uploaded</p>
+            <p className="text-xs text-muted">Click to replace</p>
+          </>
+        ) : (
+          <>
+            <span className="text-3xl text-accent leading-none" aria-hidden>+</span>
+            <p className="mt-2 text-sm text-ink/70">Upload License {side}</p>
+          </>
+        )}
+      </label>
+    </div>
   );
 }
 
@@ -643,12 +726,11 @@ function Field({ label, className = "", children }: {
   );
 }
 
-// --- Step 3 -----------------------------------------------------------------
+// --- Step 3: Review ---------------------------------------------------------
 
 function StepReview(props: {
   equipment: Equipment;
-  startDate: string;
-  endDate: string;
+  startDate: string; endDate: string; pickupDate: string;
   dropoffTime: DropoffTime;
   addons: Addon[];
   customer: CustomerState;
@@ -660,52 +742,82 @@ function StepReview(props: {
   submitting: boolean;
 }) {
   const {
-    equipment, startDate, endDate, dropoffTime, addons, customer,
+    equipment, startDate, endDate, pickupDate, dropoffTime, addons, customer,
     specialInstructions, setSpecialInstructions, pricing,
     onBack, onNext, submitting,
   } = props;
+
+  const customerFullAddress = [
+    customer.customer_address_line1,
+    customer.customer_address_line2,
+    customer.customer_city,
+    customer.customer_province,
+    customer.customer_postal_code,
+  ].filter(Boolean).join(", ");
+
+  const projectFullAddress = [
+    customer.project_address_line1,
+    customer.project_address_line2,
+    customer.project_city,
+    customer.project_province,
+    customer.project_postal_code,
+  ].filter(Boolean).join(", ");
+
+  const agreementDate = formatLongDate(todayISO());
 
   return (
     <section className="space-y-8">
       <div>
         <h2 className="font-display text-2xl font-semibold">Review your booking</h2>
-        <div className="mt-4 grid gap-6 sm:grid-cols-2">
-          <SummaryBlock title="Equipment">
-            <p className="font-medium">{equipment.name}</p>
-            <p className="font-mono text-xs text-muted">{equipment.serial}</p>
+        <p className="mt-1 text-sm text-muted">
+          Confirm everything looks right before proceeding to payment.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-ink/10 bg-ink/[0.02] divide-y divide-ink/10">
+        <ReviewRow
+          left={{ label: "Customer name", value: `${customer.first_name} ${customer.last_name}` }}
+          right={{ label: "Date of agreement", value: agreementDate }}
+        />
+        <ReviewRow
+          left={{ label: "ATTN / Business", value: customer.business_name || "—" }}
+          right={{ label: "Phone", value: customer.phone }}
+        />
+        <ReviewRow
+          left={{ label: "Email", value: customer.email }}
+          right={{ label: "Delivery date", value: formatLongDate(startDate) }}
+        />
+        <ReviewRow
+          left={{ label: "Customer address", value: customerFullAddress }}
+          right={{ label: "Pickup date", value: formatLongDate(pickupDate) }}
+        />
+        <ReviewRow
+          left={{ label: "Project address", value: projectFullAddress }}
+          right={{ label: "Drop-off time", value: dropoffTime }}
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SummaryBlock title="Equipment">
+          <p className="font-medium">{equipment.name}</p>
+          <p className="font-mono text-xs text-muted">{equipment.serial}</p>
+        </SummaryBlock>
+        {addons.length > 0 ? (
+          <SummaryBlock title="Attachments">
+            <ul className="text-sm space-y-0.5">
+              {addons.map((a, i) => (
+                <li key={a.id} className="flex justify-between">
+                  <span>{a.name}</span>
+                  <span className="font-mono text-muted">
+                    {i === 0 ? "Free" : `${formatCents(a.daily_rate_cents)}/day`}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </SummaryBlock>
-          <SummaryBlock title="Dates">
-            <p>{startDate} → {endDate}</p>
-            <p className="text-sm text-muted">Drop-off at {dropoffTime}</p>
-          </SummaryBlock>
-          {addons.length > 0 && (
-            <SummaryBlock title="Attachments" className="sm:col-span-2">
-              <ul className="text-sm">
-                {addons.map((a, i) => (
-                  <li key={a.id} className="flex justify-between">
-                    <span>{a.name}</span>
-                    <span className="font-mono text-muted">
-                      {i === 0 ? "Free" : `${formatCents(a.daily_rate_cents)}/day`}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </SummaryBlock>
-          )}
-          <SummaryBlock title="Contact" className="sm:col-span-2">
-            <p>{customer.first_name} {customer.last_name}</p>
-            <p className="text-sm text-muted">{customer.email}</p>
-            <p className="text-sm text-muted">{customer.phone}</p>
-          </SummaryBlock>
-          <SummaryBlock title="Project address" className="sm:col-span-2">
-            <p>{customer.project_address_line1}</p>
-            {customer.project_address_line2 && <p>{customer.project_address_line2}</p>}
-            <p>
-              {[customer.project_city, customer.project_province, customer.project_postal_code]
-                .filter(Boolean).join(", ")}
-            </p>
-          </SummaryBlock>
-        </div>
+        ) : (
+          <SummaryBlock title="Attachments"><p className="text-sm text-muted">None</p></SummaryBlock>
+        )}
       </div>
 
       <div>
@@ -749,20 +861,39 @@ function StepReview(props: {
   );
 }
 
-function SummaryBlock({
-  title, className = "", children,
+function ReviewRow({
+  left, right,
 }: {
-  title: string; className?: string; children: React.ReactNode;
+  left: { label: string; value: string };
+  right: { label: string; value: string };
 }) {
   return (
-    <div className={`rounded-2xl border border-ink/10 p-4 ${className}`}>
+    <div className="grid gap-6 sm:grid-cols-2 px-5 py-4">
+      <ReviewCell label={left.label} value={left.value} />
+      <ReviewCell label={right.label} value={right.value} />
+    </div>
+  );
+}
+
+function ReviewCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="font-mono text-xs uppercase tracking-widest text-muted">{label}</p>
+      <p className="mt-1 text-sm leading-snug">{value || "—"}</p>
+    </div>
+  );
+}
+
+function SummaryBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-ink/10 p-4">
       <p className="font-mono text-xs uppercase tracking-widest text-muted">{title}</p>
       <div className="mt-2">{children}</div>
     </div>
   );
 }
 
-// --- Step 4 -----------------------------------------------------------------
+// --- Step 4: Pay ------------------------------------------------------------
 
 function StepPay({
   totalCents, applicationId, locationId, paying,

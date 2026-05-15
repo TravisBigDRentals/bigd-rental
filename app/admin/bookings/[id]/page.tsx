@@ -10,10 +10,16 @@ export const metadata = {
 type Customer = {
   first_name: string;
   last_name: string;
+  business_name: string | null;
   email: string;
   phone: string;
   drivers_license_front_url: string | null;
   drivers_license_back_url: string | null;
+  customer_address_line1: string;
+  customer_address_line2: string | null;
+  customer_city: string;
+  customer_province: string;
+  customer_postal_code: string;
   project_address_line1: string;
   project_address_line2: string | null;
   project_city: string;
@@ -67,7 +73,7 @@ export default async function BookingDetailPage({
       id, start_date, end_date, dropoff_time, special_instructions, status,
       total_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
       delivered_at, returned_at, created_at,
-      customer:customer_id ( first_name, last_name, email, phone, drivers_license_front_url, drivers_license_back_url, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
+      customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
       equipment:equipment_id ( name, serial ),
       booking_addons ( id, quantity, daily_rate_cents, addon:addon_id ( name ) )
     `)
@@ -96,6 +102,9 @@ export default async function BookingDetailPage({
           <h1 className="font-display text-3xl font-bold tracking-tight">
             {customer?.first_name} {customer?.last_name}
           </h1>
+          {customer?.business_name && (
+            <p className="mt-1 text-sm text-muted">{customer.business_name}</p>
+          )}
           <p className="mt-1 font-mono text-xs text-muted">Booking {booking.id}</p>
         </div>
         <span className="inline-block rounded-full border border-ink/15 bg-paper px-3 py-1 text-xs font-mono uppercase tracking-widest">
@@ -118,7 +127,16 @@ export default async function BookingDetailPage({
           <p>{customer?.email}</p>
           <p>{customer?.phone}</p>
         </DetailCard>
-        <DetailCard title="Project address" className="sm:col-span-2">
+        <DetailCard title="Customer address">
+          <p>{customer?.customer_address_line1}</p>
+          {customer?.customer_address_line2 && <p>{customer.customer_address_line2}</p>}
+          <p>
+            {[customer?.customer_city, customer?.customer_province, customer?.customer_postal_code]
+              .filter(Boolean)
+              .join(", ")}
+          </p>
+        </DetailCard>
+        <DetailCard title="Project address">
           <p>{customer?.project_address_line1}</p>
           {customer?.project_address_line2 && <p>{customer.project_address_line2}</p>}
           <p>
