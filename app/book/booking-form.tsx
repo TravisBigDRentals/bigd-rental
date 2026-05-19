@@ -111,14 +111,12 @@ function formatDateRange(startISO: string, endISO: string): string {
 function DateRangeCalendar({
   startDate,
   endDate,
-  setStartDate,
-  setEndDate,
+  onDayClick,
   blockedRanges,
 }: {
   startDate: string;
   endDate: string;
-  setStartDate: (d: string) => void;
-  setEndDate: (d: string) => void;
+  onDayClick: (day: Date) => void;
   blockedRanges: { start_date: string; end_date: string }[];
 }) {
   const today = useMemo(() => {
@@ -127,16 +125,18 @@ function DateRangeCalendar({
     return d;
   }, []);
 
+  // We still hand react-day-picker a range so it paints range_start /
+  // range_middle / range_end visuals; click routing is done manually
+  // via onDayClick so we can support both two-click range AND
+  // box-targeting flows.
   const selected: DateRange | undefined = useMemo(() => {
     if (!startDate) return undefined;
     return {
       from: isoToDate(startDate),
-      to: endDate ? isoToDate(endDate) : isoToDate(startDate),
+      to: endDate ? isoToDate(endDate) : undefined,
     };
   }, [startDate, endDate]);
 
-  // Disabled: anything before today, plus each booked range + 1 inspection
-  // day. react-day-picker accepts an array of matchers.
   const disabled = useMemo(
     () => [
       { before: today },
@@ -154,7 +154,6 @@ function DateRangeCalendar({
     <div
       className="rounded-2xl border border-ink/15 bg-paper p-4 inline-block max-w-full overflow-x-auto"
       style={{
-        // Override react-day-picker's default blue with our brand orange
         ["--rdp-accent-color" as string]: "var(--color-accent)",
         ["--rdp-accent-background-color" as string]: "rgb(212 137 26 / 0.15)",
       }}
@@ -162,14 +161,8 @@ function DateRangeCalendar({
       <DayPicker
         mode="range"
         selected={selected}
-        onSelect={(range) => {
-          if (!range?.from) {
-            setStartDate("");
-            setEndDate("");
-            return;
-          }
-          setStartDate(dateToISO(range.from));
-          setEndDate(dateToISO(range.to ?? range.from));
+        onSelect={(_range, triggerDate) => {
+          if (triggerDate) onDayClick(triggerDate);
         }}
         disabled={disabled}
         numberOfMonths={1}
@@ -216,6 +209,39 @@ export function BookingForm({
   const [paying, setPaying] = useState(false);
   const [blockedRanges, setBlockedRanges] = useState<{ start_date: string; end_date: string }[]>([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [activeField, setActiveField] = useState<"delivery" | "pickup">("delivery");
+
+  // Single click-handler that backs BOTH date-picking paths:
+  //   1. Two-click range — user just clicks two dates. Default activeField
+  //      is "delivery", so click 1 sets delivery + auto-advances to pickup,
+  //      click 2 sets pickup. Same UX as before.
+  //   2. Box-targeting — user clicks the Delivery or Pickup box first to set
+  //      activeField, then a single calendar click fills that exact field.
+  function handleCalendarDayClick(day: Date) {
+    const iso = dateToISO(day);
+    if (activeField === "delivery") {
+      setStartDate(iso);
+      // If existing pickup is now invalid (<= new delivery), drop it so the
+      // user can re-pick. Auto-advance focus to pickup field.
+      if (endDate && isoToDate(endDate) <= day) setEndDate("");
+      setActiveField("pickup");
+      return;
+    }
+    // activeField === "pickup"
+    if (!startDate) {
+      // No delivery yet — silently treat this click as delivery instead.
+      setStartDate(iso);
+      return;
+    }
+    if (day <= isoToDate(startDate)) {
+      // User clicked earlier than (or same as) delivery; treat as resetting
+      // delivery rather than throwing an error.
+      setStartDate(iso);
+      setEndDate("");
+      return;
+    }
+    setEndDate(iso);
+  }
 
   // Scroll error into view when one appears — error banner is at the top of the
   // form; user has typically scrolled down by the time they hit Next.
@@ -490,8 +516,8 @@ export function BookingForm({
           equipment={equipment}
           equipmentId={equipmentId}
           setEquipmentId={(id) => { setEquipmentId(id); setAddonIds([]); }}
-          startDate={startDate} setStartDate={setStartDate}
-          endDate={endDate} setEndDate={setEndDate}
+          startDate={startDate}
+          endDate={endDate}
           pickupDate={pickupDateISO}
           dropoffTime={dropoffTime} setDropoffTime={setDropoffTime}
           compatibleAddons={compatibleAddons}
@@ -500,6 +526,9 @@ export function BookingForm({
           blockedRanges={blockedRanges}
           loadingAvailability={loadingAvailability}
           currentConflict={currentConflict}
+          activeField={activeField}
+          setActiveField={setActiveField}
+          onCalendarDayClick={handleCalendarDayClick}
           onNext={goToStep2} loading={checkingAvailability}
         />
       )}
@@ -572,8 +601,8 @@ function StepConfigure(props: {
   equipment: Equipment[];
   equipmentId: string;
   setEquipmentId: (id: string) => void;
-  startDate: string; setStartDate: (d: string) => void;
-  endDate: string; setEndDate: (d: string) => void;
+  startDate: string;
+  endDate: string;
   pickupDate: string;
   dropoffTime: DropoffTime; setDropoffTime: (t: DropoffTime) => void;
   compatibleAddons: Addon[];
@@ -582,15 +611,19 @@ function StepConfigure(props: {
   blockedRanges: { start_date: string; end_date: string }[];
   loadingAvailability: boolean;
   currentConflict: { start_date: string; end_date: string } | null;
+  activeField: "delivery" | "pickup";
+  setActiveField: (f: "delivery" | "pickup") => void;
+  onCalendarDayClick: (day: Date) => void;
   onNext: () => void; loading: boolean;
 }) {
   const {
     equipment, equipmentId, setEquipmentId,
-    startDate, setStartDate, endDate, setEndDate, pickupDate,
+    startDate, endDate, pickupDate,
     dropoffTime, setDropoffTime,
     compatibleAddons, addonIds, toggleAddon,
     pricing,
     blockedRanges, loadingAvailability, currentConflict,
+    activeField, setActiveField, onCalendarDayClick,
     onNext, loading,
   } = props;
 
@@ -622,7 +655,8 @@ function StepConfigure(props: {
         <h2 className="font-display text-2xl font-semibold">Rental dates</h2>
         {equipmentId ? (
           <p className="mt-1 text-sm text-muted">
-            Pick dates on the calendar or type them directly in the fields. Unavailable days are greyed out.
+            Click two dates on the calendar to pick a range, or click <strong>Delivery date</strong> /{" "}
+            <strong>Pickup date</strong> first to control which one the next click sets. Greyed-out days are unavailable.
           </p>
         ) : (
           <p className="mt-1 text-sm text-muted">Pick a machine above to see availability.</p>
@@ -633,32 +667,41 @@ function StepConfigure(props: {
             <DateRangeCalendar
               startDate={startDate}
               endDate={endDate}
-              setStartDate={setStartDate}
-              setEndDate={setEndDate}
+              onDayClick={onCalendarDayClick}
               blockedRanges={blockedRanges}
             />
           )}
           <div className="flex flex-col gap-4 lg:min-w-[220px]">
-            <label className="block rounded-lg border border-ink/15 bg-paper px-3 py-2 focus-within:border-accent transition-colors">
+            <button
+              type="button"
+              onClick={() => setActiveField("delivery")}
+              aria-pressed={activeField === "delivery"}
+              className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                activeField === "delivery"
+                  ? "border-accent bg-accent/5 ring-1 ring-accent"
+                  : "border-ink/15 bg-paper hover:border-ink/30"
+              }`}
+            >
               <span className="block text-xs font-medium text-muted">Delivery date</span>
-              <input
-                type="date"
-                value={startDate}
-                min={todayISO()}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="mt-1 w-full bg-transparent font-mono text-sm focus:outline-none"
-              />
-            </label>
-            <label className="block rounded-lg border border-ink/15 bg-paper px-3 py-2 focus-within:border-accent transition-colors">
+              <span className="mt-1 block font-mono text-sm">
+                {startDate || <span className="text-muted">Click a day on the calendar →</span>}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveField("pickup")}
+              aria-pressed={activeField === "pickup"}
+              className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                activeField === "pickup"
+                  ? "border-accent bg-accent/5 ring-1 ring-accent"
+                  : "border-ink/15 bg-paper hover:border-ink/30"
+              }`}
+            >
               <span className="block text-xs font-medium text-muted">Pickup date</span>
-              <input
-                type="date"
-                value={endDate}
-                min={startDate ? addOneDay(startDate) : todayISO()}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="mt-1 w-full bg-transparent font-mono text-sm focus:outline-none"
-              />
-            </label>
+              <span className="mt-1 block font-mono text-sm">
+                {endDate || <span className="text-muted">Click a day on the calendar →</span>}
+              </span>
+            </button>
             <label className="block">
               <span className="block text-sm font-medium">Drop-off time</span>
               <select value={dropoffTime}
