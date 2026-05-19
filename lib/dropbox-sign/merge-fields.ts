@@ -36,8 +36,14 @@ function formatLongDate(iso: string): string {
   });
 }
 
-function streetWithLine2(line1: string, line2: string | null): string {
-  return line2?.trim() ? `${line1}, ${line2}` : line1;
+// Pass line1 only — Dropbox Sign template fields are sized when placed in
+// the editor, and "line1, line2" concatenations easily exceed the default
+// ~33 char width. Customer's line2 (suite/unit #) stays in the booking
+// record; just not embedded on the contract. If Big D's wants it on the
+// contract, add separate `*_address_line2` fields to the template and
+// extend this builder.
+function street(line1: string): string {
+  return line1;
 }
 
 // Builds the merge fields payload for the Dropbox Sign template. Names match
@@ -62,11 +68,11 @@ export function buildMergeFields(
     { name: "customer_business_name",   value: customer.business_name ?? "" },
     { name: "customer_email",           value: customer.email },
     { name: "customer_phone",           value: customer.phone },
-    { name: "customer_address_line1",   value: streetWithLine2(customer.customer_address_line1, customer.customer_address_line2) },
+    { name: "customer_address_line1",   value: street(customer.customer_address_line1) },
     { name: "customer_city",            value: customer.customer_city },
     { name: "customer_province",        value: customer.customer_province },
     { name: "customer_postal_code",     value: customer.customer_postal_code },
-    { name: "project_address_line1",    value: streetWithLine2(customer.project_address_line1, customer.project_address_line2) },
+    { name: "project_address_line1",    value: street(customer.project_address_line1) },
     { name: "project_city",             value: customer.project_city },
     { name: "project_province",         value: customer.project_province },
     { name: "project_postal_code",      value: customer.project_postal_code },
