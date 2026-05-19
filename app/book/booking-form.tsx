@@ -622,7 +622,7 @@ function StepConfigure(props: {
         <h2 className="font-display text-2xl font-semibold">Rental dates</h2>
         {equipmentId ? (
           <p className="mt-1 text-sm text-muted">
-            Click your delivery day, then click your end day. Unavailable days are greyed out.
+            Pick dates on the calendar or type them directly in the fields. Unavailable days are greyed out.
           </p>
         ) : (
           <p className="mt-1 text-sm text-muted">Pick a machine above to see availability.</p>
@@ -638,15 +638,27 @@ function StepConfigure(props: {
               blockedRanges={blockedRanges}
             />
           )}
-          <div className="flex flex-col gap-4 lg:min-w-[200px]">
-            <div className="rounded-lg border border-ink/15 bg-paper px-3 py-2">
-              <p className="block text-xs font-medium text-muted">Delivery date</p>
-              <p className="mt-1 font-mono text-sm">{startDate || "—"}</p>
-            </div>
-            <div className="rounded-lg border border-ink/15 bg-paper px-3 py-2">
-              <p className="block text-xs font-medium text-muted">Pickup date</p>
-              <p className="mt-1 font-mono text-sm">{endDate || "—"}</p>
-            </div>
+          <div className="flex flex-col gap-4 lg:min-w-[220px]">
+            <label className="block rounded-lg border border-ink/15 bg-paper px-3 py-2 focus-within:border-accent transition-colors">
+              <span className="block text-xs font-medium text-muted">Delivery date</span>
+              <input
+                type="date"
+                value={startDate}
+                min={todayISO()}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="mt-1 w-full bg-transparent font-mono text-sm focus:outline-none"
+              />
+            </label>
+            <label className="block rounded-lg border border-ink/15 bg-paper px-3 py-2 focus-within:border-accent transition-colors">
+              <span className="block text-xs font-medium text-muted">Pickup date</span>
+              <input
+                type="date"
+                value={endDate}
+                min={startDate ? addOneDay(startDate) : todayISO()}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="mt-1 w-full bg-transparent font-mono text-sm focus:outline-none"
+              />
+            </label>
             <label className="block">
               <span className="block text-sm font-medium">Drop-off time</span>
               <select value={dropoffTime}
