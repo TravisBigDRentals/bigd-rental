@@ -249,6 +249,12 @@ export function BookingForm({
     if (error) window.scrollTo({ top: 0, behavior: "smooth" });
   }, [error]);
 
+  // Scroll to top whenever the step changes so users see the form header +
+  // step indicator instead of staying at their previous scroll position.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
+
   // Fetch all booked ranges for the selected equipment so we can show them
   // inline and disable Next when the picked dates conflict — better UX than
   // surfacing the conflict only after the user clicks Next.
