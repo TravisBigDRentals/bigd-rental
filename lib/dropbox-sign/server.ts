@@ -16,6 +16,10 @@ export function embeddedApi(): DropboxSign.EmbeddedApi {
   return withKey(new DropboxSign.EmbeddedApi());
 }
 
+export function templateApi(): DropboxSign.TemplateApi {
+  return withKey(new DropboxSign.TemplateApi());
+}
+
 export function templateId(): string {
   const id = process.env.HELLOSIGN_TEMPLATE_ID;
   if (!id) throw new Error("HELLOSIGN_TEMPLATE_ID is not set");

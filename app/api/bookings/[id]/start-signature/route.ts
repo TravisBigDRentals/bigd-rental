@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   signatureRequestApi,
   embeddedApi,
+  templateApi,
   templateId,
   clientId,
 } from "@/lib/dropbox-sign/server";
@@ -88,7 +89,25 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  const customFields = buildMergeFields(customer, booking, equipment, addons);
+  // Fetch the template's actual custom-field names and filter our payload to
+  // only fields the template defines. Dropbox Sign rejects the whole request
+  // if we send a name that isn't on the template — and we want adding /
+  // removing fields in the template editor to "just work" without code edits.
+  let templateFieldNames: Set<string> = new Set();
+  try {
+    const tmplResp = await templateApi().templateGet(templateId());
+    const tmplFields = tmplResp.body.template?.customFields ?? [];
+    templateFieldNames = new Set(
+      tmplFields
+        .map((f) => (f as { name?: string }).name)
+        .filter((n): n is string => typeof n === "string" && n.length > 0),
+    );
+  } catch (err) {
+    return NextResponse.json({ error: `Template lookup failed: ${extractError(err)}` }, { status: 502 });
+  }
+
+  const allFields = buildMergeFields(customer, booking, equipment, addons);
+  const customFields = allFields.filter((f) => templateFieldNames.has(f.name));
 
   try {
     const signerPayload = {
