@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { getSquareClient, squareLocationId } from "@/lib/square/server";
-import { sendBookingConfirmationEmail } from "@/lib/email/booking-confirmation";
+import { sendBookingConfirmationEmailIfReady } from "@/lib/email/booking-confirmation";
 
 export const runtime = "nodejs";
 
@@ -88,10 +88,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: updErr.message }, { status: 500 });
   }
 
-  // Send confirmation email (don't block on failure)
-  sendBookingConfirmationEmail({ bookingId: booking_id }).catch((e) =>
-    console.error("Confirmation email failed:", e),
-  );
+  // Send confirmation email if BOTH payment AND signed PDF are ready. If the
+  // signed-PDF webhook hasn't fired yet, this is a no-op; the webhook handler
+  // will dispatch instead. Idempotent — never double-sends.
+  sendBookingConfirmationEmailIfReady(booking_id).then((r) => {
+    if (!r.sent) console.log(`[email] payment-success: ${r.reason}`);
+    else console.log(`[email] payment-success: sent ${r.messageId}`);
+  }).catch((e) => console.error("Confirmation email failed:", e));
 
   return NextResponse.json({ booking_id, payment_id: paymentId, status: "booked" });
 }

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { signatureRequestApi } from "@/lib/dropbox-sign/server";
+import { sendBookingConfirmationEmailIfReady } from "@/lib/email/booking-confirmation";
 
 export const runtime = "nodejs";
 
@@ -85,6 +86,13 @@ export async function POST(req: Request) {
         signature_completed_at: new Date().toISOString(),
       })
       .eq("id", booking.id);
+
+    // If payment already happened by the time the signed PDF lands, this
+    // dispatch sends the confirmation email. Idempotent vs. the matching
+    // call in /api/payments/charge — whichever event finishes last sends.
+    const emailRes = await sendBookingConfirmationEmailIfReady(booking.id);
+    if (emailRes.sent) console.log(`[email] sign-webhook: sent ${emailRes.messageId}`);
+    else console.log(`[email] sign-webhook: ${emailRes.reason}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown error";
     return bad(`download/store failed: ${msg}`, 500);
