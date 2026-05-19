@@ -2,9 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { DayPicker, type DateRange } from "react-day-picker";
+import "react-day-picker/style.css";
 import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import type { Addon, Equipment } from "@/lib/bookings/queries";
 import { calculatePricing, formatCents } from "@/lib/pricing";
+
+function dateToISO(d: Date): string {
+  // Local-date ISO (YYYY-MM-DD) — avoids UTC drift from toISOString().
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function isoToDate(iso: string): Date {
+  return new Date(iso + "T00:00:00");
+}
 
 type Step = 1 | 2 | 3 | 4;
 type DropoffTime = "9:00 AM" | "10:00 AM";
@@ -92,6 +106,78 @@ function formatDateRange(startISO: string, endISO: string): string {
   if (sameMonth) return `${month(s)} ${day(s)} – ${day(e)}, ${year(s)}`;
   if (sameYear)  return `${month(s)} ${day(s)} – ${month(e)} ${day(e)}, ${year(s)}`;
   return `${month(s)} ${day(s)}, ${year(s)} – ${month(e)} ${day(e)}, ${year(e)}`;
+}
+
+function DateRangeCalendar({
+  startDate,
+  endDate,
+  setStartDate,
+  setEndDate,
+  blockedRanges,
+}: {
+  startDate: string;
+  endDate: string;
+  setStartDate: (d: string) => void;
+  setEndDate: (d: string) => void;
+  blockedRanges: { start_date: string; end_date: string }[];
+}) {
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const selected: DateRange | undefined = useMemo(() => {
+    if (!startDate) return undefined;
+    return {
+      from: isoToDate(startDate),
+      to: endDate ? isoToDate(endDate) : isoToDate(startDate),
+    };
+  }, [startDate, endDate]);
+
+  // Disabled: anything before today, plus each booked range + 1 inspection
+  // day. react-day-picker accepts an array of matchers.
+  const disabled = useMemo(
+    () => [
+      { before: today },
+      ...blockedRanges.map((r) => {
+        const from = isoToDate(r.start_date);
+        const to = isoToDate(r.end_date);
+        to.setDate(to.getDate() + 1);
+        return { from, to };
+      }),
+    ],
+    [blockedRanges, today],
+  );
+
+  return (
+    <div
+      className="rounded-2xl border border-ink/15 bg-paper p-4 inline-block max-w-full overflow-x-auto"
+      style={{
+        // Override react-day-picker's default blue with our brand orange
+        ["--rdp-accent-color" as string]: "var(--color-accent)",
+        ["--rdp-accent-background-color" as string]: "rgb(212 137 26 / 0.15)",
+      }}
+    >
+      <DayPicker
+        mode="range"
+        selected={selected}
+        onSelect={(range) => {
+          if (!range?.from) {
+            setStartDate("");
+            setEndDate("");
+            return;
+          }
+          setStartDate(dateToISO(range.from));
+          setEndDate(dateToISO(range.to ?? range.from));
+        }}
+        disabled={disabled}
+        numberOfMonths={1}
+        defaultMonth={selected?.from ?? today}
+        showOutsideDays
+      />
+    </div>
+  );
 }
 
 // Mirrors the DB trigger's overlap logic: both ranges are treated as
@@ -533,28 +619,43 @@ function StepConfigure(props: {
 
       <div>
         <h2 className="font-display text-2xl font-semibold">Rental dates</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <label className="block">
-            <span className="block text-sm font-medium">Delivery date</span>
-            <input type="date" value={startDate} min={todayISO()}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
-          </label>
-          <label className="block">
-            <span className="block text-sm font-medium">End date</span>
-            <input type="date" value={endDate} min={startDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
-          </label>
-          <label className="block">
-            <span className="block text-sm font-medium">Drop-off time</span>
-            <select value={dropoffTime}
-              onChange={(e) => setDropoffTime(e.target.value as DropoffTime)}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2">
-              <option>9:00 AM</option>
-              <option>10:00 AM</option>
-            </select>
-          </label>
+        {equipmentId ? (
+          <p className="mt-1 text-sm text-muted">
+            Click your delivery day, then click your end day. Unavailable days are greyed out.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted">Pick a machine above to see availability.</p>
+        )}
+
+        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start">
+          {equipmentId && (
+            <DateRangeCalendar
+              startDate={startDate}
+              endDate={endDate}
+              setStartDate={setStartDate}
+              setEndDate={setEndDate}
+              blockedRanges={blockedRanges}
+            />
+          )}
+          <div className="flex flex-col gap-4 lg:min-w-[200px]">
+            <div className="rounded-lg border border-ink/15 bg-paper px-3 py-2">
+              <p className="block text-xs font-medium text-muted">Delivery date</p>
+              <p className="mt-1 font-mono text-sm">{startDate || "—"}</p>
+            </div>
+            <div className="rounded-lg border border-ink/15 bg-paper px-3 py-2">
+              <p className="block text-xs font-medium text-muted">End date</p>
+              <p className="mt-1 font-mono text-sm">{endDate || "—"}</p>
+            </div>
+            <label className="block">
+              <span className="block text-sm font-medium">Drop-off time</span>
+              <select value={dropoffTime}
+                onChange={(e) => setDropoffTime(e.target.value as DropoffTime)}
+                className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2">
+                <option>9:00 AM</option>
+                <option>10:00 AM</option>
+              </select>
+            </label>
+          </div>
         </div>
         {pickupDate && (
           <div className="mt-4 rounded-lg border border-ink/15 bg-ink/[0.03] px-4 py-3 flex items-center gap-3">
