@@ -72,28 +72,26 @@ function formatLongDate(iso: string): string {
   });
 }
 
+// Build the string manually rather than asking the locale formatter to
+// render partial date shapes — browsers do unpredictable things when you
+// ask for `{day: "numeric", year: "numeric"}` with no month, including
+// emitting weird patterns like "(day: 20)" in some en-CA fallbacks.
 function formatDateRange(startISO: string, endISO: string): string {
   if (!startISO || !endISO) return "";
   const s = new Date(startISO + "T00:00:00");
   const e = new Date(endISO + "T00:00:00");
-  const sameYear  = s.getFullYear() === e.getFullYear();
-  const sameMonth = sameYear && s.getMonth() === e.getMonth();
-  const sameDay   = sameMonth && s.getDate() === e.getDate();
+  const month = (d: Date) => d.toLocaleDateString("en-CA", { month: "short" });
+  const day   = (d: Date) => d.getDate();
+  const year  = (d: Date) => d.getFullYear();
 
-  if (sameDay) {
-    return s.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
-  }
-  if (sameMonth) {
-    // "May 27 – 29, 2026"
-    return `${s.toLocaleDateString("en-CA", { month: "short", day: "numeric" })} – ${e.toLocaleDateString("en-CA", { day: "numeric", year: "numeric" })}`;
-  }
-  if (sameYear) {
-    // "Jun 24 – Jul 31, 2026"
-    return `${s.toLocaleDateString("en-CA", { month: "short", day: "numeric" })} – ${e.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}`;
-  }
-  // "Dec 30, 2026 – Jan 5, 2027"
-  const opts = { month: "short", day: "numeric", year: "numeric" } as const;
-  return `${s.toLocaleDateString("en-CA", opts)} – ${e.toLocaleDateString("en-CA", opts)}`;
+  const sameYear  = year(s) === year(e);
+  const sameMonth = sameYear && s.getMonth() === e.getMonth();
+  const sameDay   = sameMonth && day(s) === day(e);
+
+  if (sameDay)   return `${month(s)} ${day(s)}, ${year(s)}`;
+  if (sameMonth) return `${month(s)} ${day(s)} – ${day(e)}, ${year(s)}`;
+  if (sameYear)  return `${month(s)} ${day(s)} – ${month(e)} ${day(e)}, ${year(s)}`;
+  return `${month(s)} ${day(s)}, ${year(s)} – ${month(e)} ${day(e)}, ${year(e)}`;
 }
 
 // Mirrors the DB trigger's overlap logic: both ranges are treated as
