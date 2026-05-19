@@ -94,12 +94,28 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
     .filter(Boolean)
     .join(", ");
 
+  // Sandbox redirect: while in test mode, Resend's onboarding@resend.dev
+  // sender only delivers to the Resend account owner. Override the actual
+  // recipient to BIGDS_ADMIN_EMAIL so every dev email lands somewhere
+  // useful, regardless of what the test customer typed. Production
+  // (SQUARE_ENVIRONMENT=production) sends to the real customer.
+  const isSandbox = (process.env.SQUARE_ENVIRONMENT ?? "sandbox") !== "production";
+  const intendedRecipient = customer.email;
+  const recipient = isSandbox ? (adminCc ?? intendedRecipient) : intendedRecipient;
+  const cc = isSandbox ? undefined : adminCc;
+  const subjectPrefix = isSandbox ? "[TEST] " : "";
+  const sandboxNotice = isSandbox
+    ? `<div style="background:#FFF7E5; border:1px solid #F2C461; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#8A5A00;">
+         TEST MODE — in production this email would have gone to <strong>${intendedRecipient}</strong>.
+       </div>`
+    : "";
+
   const result = await resend.emails.send({
     from: `Big D's Rental <${from}>`,
-    to: customer.email,
-    cc: adminCc,
-    subject: `Booking confirmed — ${equipment.name} (${booking.start_date})`,
-    html: htmlBody({
+    to: recipient,
+    cc,
+    subject: `${subjectPrefix}Booking confirmed — ${equipment.name} (${booking.start_date})`,
+    html: sandboxNotice + htmlBody({
       firstName: customer.first_name,
       equipmentName: equipment.name,
       equipmentSerial: equipment.serial,
