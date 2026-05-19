@@ -292,7 +292,8 @@ export function BookingForm({
     });
   }, [selectedEquipment, selectedAddons, startDate, endDate]);
 
-  const pickupDateISO = useMemo(() => addOneDay(endDate), [endDate]);
+  // `end_date` IS the pickup date in our data model — no +1.
+  const pickupDateISO = endDate;
 
   function toggleAddon(id: string) {
     setAddonIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -355,9 +356,9 @@ export function BookingForm({
   async function goToStep2() {
     setError(null);
     if (!equipmentId) return setError("Pick a machine first");
-    if (!startDate || !endDate) return setError("Pick start and end dates");
-    if (new Date(endDate) < new Date(startDate)) {
-      return setError("End date must be on or after start date");
+    if (!startDate || !endDate) return setError("Pick delivery and pickup dates");
+    if (new Date(endDate) <= new Date(startDate)) {
+      return setError("Pickup date must be at least one day after the delivery date");
     }
 
     setCheckingAvailability(true);
@@ -643,7 +644,7 @@ function StepConfigure(props: {
               <p className="mt-1 font-mono text-sm">{startDate || "—"}</p>
             </div>
             <div className="rounded-lg border border-ink/15 bg-paper px-3 py-2">
-              <p className="block text-xs font-medium text-muted">End date</p>
+              <p className="block text-xs font-medium text-muted">Pickup date</p>
               <p className="mt-1 font-mono text-sm">{endDate || "—"}</p>
             </div>
             <label className="block">

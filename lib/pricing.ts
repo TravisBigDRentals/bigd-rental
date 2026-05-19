@@ -20,8 +20,15 @@ export type PricingBreakdown = {
   totalCents: number;
 };
 
+// Rental days = end_date − delivery_date.
+//
+// `end_date` is when Big D's PICKS UP the equipment (morning of), not the
+// last day the customer has it. So a May 21 → May 22 rental is 24 hours = 1
+// day. Same model as hotel check-in/check-out (check-out date is not a
+// billed night). Floor of 1 so a same-day delivery/pickup mistake doesn't
+// produce a $0 booking — validation in the form should prevent that case.
 export function rentalDays(startDate: string, endDate: string): number {
-  const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
+  const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate));
   return Math.max(1, days);
 }
 
