@@ -363,6 +363,7 @@ export function BookingForm({
       {step === 4 && pricing && (
         <StepPay totalCents={pricing.totalCents}
           applicationId={SQUARE_APP_ID} locationId={SQUARE_LOC_ID}
+          customerPostalCode={customer.customer_postal_code}
           paying={paying} onPaymentToken={handlePaymentToken}
           onBack={() => setStep(3)} />
       )}
@@ -896,12 +897,13 @@ function SummaryBlock({ title, children }: { title: string; children: React.Reac
 // --- Step 4: Pay ------------------------------------------------------------
 
 function StepPay({
-  totalCents, applicationId, locationId, paying,
+  totalCents, applicationId, locationId, customerPostalCode, paying,
   onPaymentToken, onBack,
 }: {
   totalCents: number;
   applicationId: string;
   locationId: string;
+  customerPostalCode: string;
   paying: boolean;
   onPaymentToken: (sourceId: string) => void;
   onBack: () => void;
@@ -922,7 +924,7 @@ function StepPay({
   return (
     <section className="space-y-6">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Payment</h2>
+        <h2 className="font-display text-2xl font-semibold">Billing Details</h2>
         <p className="mt-1 text-sm text-muted">
           Card details are tokenized by Square directly — they never touch our servers.
         </p>
@@ -937,6 +939,12 @@ function StepPay({
         <PaymentForm
           applicationId={applicationId}
           locationId={locationId}
+          // overrides becomes the 3rd arg to Square.payments(); `language: en-CA`
+          // switches the postal-code field's label from "ZIP" to "Postal Code"
+          // and applies Canadian postal-code validation. The wrapper's types
+          // don't list `language` but the underlying Square SDK accepts it.
+          // @ts-expect-error react-square-web-payments-sdk types omit language
+          overrides={{ language: "en-CA" }}
           cardTokenizeResponseReceived={async (tokenResult) => {
             if (tokenResult.status !== "OK" || !tokenResult.token) return;
             onPaymentToken(tokenResult.token);
@@ -948,6 +956,7 @@ function StepPay({
           })}
         >
           <CreditCard
+            postalCode={customerPostalCode}
             buttonProps={{
               isLoading: paying,
               css: {

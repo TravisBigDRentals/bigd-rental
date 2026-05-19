@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatCents } from "@/lib/pricing";
@@ -81,6 +82,21 @@ export default async function ConfirmedPage({
         <p className="mt-8 font-mono text-xs text-muted">
           Keep this booking ID handy in case you need to reach out about your rental.
         </p>
+
+        <div className="mt-10 flex flex-wrap items-center gap-3">
+          <Link
+            href="/book"
+            className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover transition-colors"
+          >
+            Book another rental
+          </Link>
+          <Link
+            href="/"
+            className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 transition-colors"
+          >
+            ← Back to home
+          </Link>
+        </div>
       </div>
     </main>
   );
