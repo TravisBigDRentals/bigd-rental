@@ -92,7 +92,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   try {
     const signerPayload = {
-      role: "Renter",
+      // Must match the signer role name defined in the Dropbox Sign template
+      // exactly (case-sensitive). The template was created with "RENTER".
+      role: "RENTER",
       emailAddress: customer.email,
       name: `${customer.first_name} ${customer.last_name}`.trim(),
     };
