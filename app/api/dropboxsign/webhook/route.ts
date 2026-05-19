@@ -60,42 +60,47 @@ export async function POST(req: Request) {
     .single();
   if (!booking) return ack(); // no matching booking; nothing to do
 
-  // Skip re-download if we already have a stored PDF for this booking
-  if (booking.signed_agreement_pdf_url) return ack();
+  // PDF download is only needed once. After that, subsequent webhook events
+  // (e.g., signature_request_all_signed firing after the first
+  // signature_request_signed) just re-check the email dispatcher.
+  if (!booking.signed_agreement_pdf_url) {
+    try {
+      const sigApi = signatureRequestApi();
+      const fileResp = await sigApi.signatureRequestFiles(sigRequestId, "pdf");
+      const fileBody = fileResp.body as unknown as ArrayBuffer | Blob | Buffer;
+      const buffer = Buffer.isBuffer(fileBody) ? fileBody : Buffer.from(fileBody as ArrayBuffer);
 
-  try {
-    const sigApi = signatureRequestApi();
-    const fileResp = await sigApi.signatureRequestFiles(sigRequestId, "pdf");
-    // SDK returns a Buffer-like in `body`; cast through ArrayBufferLike for the storage SDK.
-    const fileBody = fileResp.body as unknown as ArrayBuffer | Blob | Buffer;
-    const buffer = Buffer.isBuffer(fileBody) ? fileBody : Buffer.from(fileBody as ArrayBuffer);
+      const path = `${booking.id}.pdf`;
+      const { error: upErr } = await supabase.storage
+        .from("signed-agreements")
+        .upload(path, buffer, { contentType: "application/pdf", upsert: true });
+      if (upErr) return bad(`storage upload failed: ${upErr.message}`, 500);
 
-    const path = `${booking.id}.pdf`;
-    const { error: upErr } = await supabase.storage
-      .from("signed-agreements")
-      .upload(path, buffer, { contentType: "application/pdf", upsert: true });
-    if (upErr) {
-      // Don't fail the webhook — we'll retry next event. Just log via response.
-      return bad(`storage upload failed: ${upErr.message}`, 500);
+      await supabase
+        .from("bookings")
+        .update({
+          signed_agreement_pdf_url: path,
+          signature_completed_at: new Date().toISOString(),
+        })
+        .eq("id", booking.id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      return bad(`download/store failed: ${msg}`, 500);
     }
+  }
 
-    await supabase
-      .from("bookings")
-      .update({
-        signed_agreement_pdf_url: path,
-        signature_completed_at: new Date().toISOString(),
-      })
-      .eq("id", booking.id);
-
-    // If payment already happened by the time the signed PDF lands, this
-    // dispatch sends the confirmation email. Idempotent vs. the matching
-    // call in /api/payments/charge — whichever event finishes last sends.
+  // ALWAYS run the dispatcher on a signed-event webhook, even when the PDF
+  // was already uploaded. The PDF first-upload happens on the first webhook,
+  // but payment may not land until later — every subsequent signed-event
+  // webhook then re-checks whether email conditions are now satisfied.
+  // Dispatcher is idempotent (atomic claim on email_sent_at).
+  try {
     const emailRes = await sendBookingConfirmationEmailIfReady(booking.id);
     if (emailRes.sent) console.log(`[email] sign-webhook: sent ${emailRes.messageId}`);
     else console.log(`[email] sign-webhook: ${emailRes.reason}`);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "unknown error";
-    return bad(`download/store failed: ${msg}`, 500);
+  } catch (e) {
+    console.error("[email] sign-webhook threw:", e);
+    // Don't fail the webhook ack — Dropbox Sign would retry forever otherwise.
   }
 
   return ack();

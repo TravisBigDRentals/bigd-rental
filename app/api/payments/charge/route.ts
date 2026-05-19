@@ -90,11 +90,17 @@ export async function POST(req: Request) {
 
   // Send confirmation email if BOTH payment AND signed PDF are ready. If the
   // signed-PDF webhook hasn't fired yet, this is a no-op; the webhook handler
-  // will dispatch instead. Idempotent — never double-sends.
-  sendBookingConfirmationEmailIfReady(booking_id).then((r) => {
-    if (!r.sent) console.log(`[email] payment-success: ${r.reason}`);
-    else console.log(`[email] payment-success: sent ${r.messageId}`);
-  }).catch((e) => console.error("Confirmation email failed:", e));
+  // will dispatch instead. AWAITED here — fire-and-forget doesn't survive in
+  // Vercel serverless (the lambda dies right after `return`, killing the
+  // in-flight Resend call). Caught so a Resend failure doesn't break the
+  // payment response — payment already succeeded by this point.
+  try {
+    const emailRes = await sendBookingConfirmationEmailIfReady(booking_id);
+    if (emailRes.sent) console.log(`[email] payment-success: sent ${emailRes.messageId}`);
+    else console.log(`[email] payment-success: ${emailRes.reason}`);
+  } catch (e) {
+    console.error("[email] payment-success threw:", e);
+  }
 
   return NextResponse.json({ booking_id, payment_id: paymentId, status: "booked" });
 }
