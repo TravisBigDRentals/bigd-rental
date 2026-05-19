@@ -36,14 +36,16 @@ function formatLongDate(iso: string): string {
   });
 }
 
-// Pass line1 only — Dropbox Sign template fields are sized when placed in
-// the editor, and "line1, line2" concatenations easily exceed the default
-// ~33 char width. Customer's line2 (suite/unit #) stays in the booking
-// record; just not embedded on the contract. If Big D's wants it on the
-// contract, add separate `*_address_line2` fields to the template and
-// extend this builder.
+// Trim the street value for Dropbox Sign template fields. Customers
+// sometimes paste the full concatenated address ("5219 Falsbridge Dr NE,
+// Calgary, AB T3J 3C1") into Step-2 line1 instead of just the street.
+// Take everything before the first comma if present — that's the actual
+// street segment. The standalone city/province/postal fields populate
+// their own merge fields. Then hard-cap at 32 chars so we never trip the
+// template's ~33-char width limit even on outlier street names.
 function street(line1: string): string {
-  return line1;
+  const trimmed = line1.split(",")[0].trim();
+  return trimmed.length > 32 ? trimmed.slice(0, 32) : trimmed;
 }
 
 // Builds the merge fields payload for the Dropbox Sign template. Names match
