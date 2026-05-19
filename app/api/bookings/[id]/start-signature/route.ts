@@ -82,6 +82,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const customFields = buildMergeFields(customer, booking, equipment, addons);
 
   try {
+    console.log("[start-signature] creating request", { bookingId: id, templateId: templateId(), clientId: clientId(), fieldCount: customFields.length });
     const resp = await sigApi.signatureRequestCreateEmbeddedWithTemplate({
       clientId: clientId(),
       templateIds: [templateId()],
@@ -114,7 +115,26 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     return NextResponse.json({ sign_url: signUrl });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Dropbox Sign API error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: extractError(err) }, { status: 502 });
   }
+}
+
+// The @dropbox/sign SDK throws HttpError instances whose top-level message
+// is just "HTTP request failed". The actually useful detail (validation
+// errors, missing fields, bad template ID, etc.) lives on `.body.error` or
+// `.response.body`. Surface it.
+function extractError(err: unknown): string {
+  if (err && typeof err === "object") {
+    const e = err as { body?: unknown; message?: unknown; statusCode?: unknown };
+    if (e.body) {
+      const body = e.body as { error?: { errorMsg?: string; errorName?: string } };
+      const apiErr = body.error;
+      if (apiErr?.errorMsg) {
+        return apiErr.errorName ? `${apiErr.errorName}: ${apiErr.errorMsg}` : apiErr.errorMsg;
+      }
+      try { return JSON.stringify(e.body); } catch { /* fall through */ }
+    }
+    if (typeof e.message === "string") return e.message;
+  }
+  return "Dropbox Sign API error";
 }
