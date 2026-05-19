@@ -86,6 +86,7 @@ Should be the same keys with the same values. Don't worry if `HELLOSIGN_CLIENT_I
   - New `NEXT_PUBLIC_SQUARE_LOCATION_ID` (Big D's actual store location)
   - Flip `SQUARE_ENVIRONMENT=production`
   - Re-register webhook in production environment
+  - **Verify the card form shows "Postal Code" (not "ZIP")** after switching to production creds. The label is driven by the Square Location's country setting. Big D's production location should already be Canadian, but confirm by walking through the booking flow once on the live URL.
 - [ ] Dropbox Sign: switch API key from test to production
 - [ ] Set up Sentry or Vercel observability for error monitoring
 
