@@ -20,7 +20,7 @@ function isoToDate(iso: string): Date {
   return new Date(iso + "T00:00:00");
 }
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 type DropoffTime = "9:00 AM" | "10:00 AM";
 
 type CustomerState = {
@@ -430,7 +430,7 @@ export function BookingForm({
     setStep(3);
   }
 
-  async function createBookingAndAdvanceToPay() {
+  async function createBookingAndAdvanceToSign() {
     setError(null);
     if (bookingId) {
       setStep(4);
@@ -481,6 +481,11 @@ export function BookingForm({
     } finally {
       setCreatingBooking(false);
     }
+  }
+
+  function handleSignatureComplete() {
+    setError(null);
+    setStep(5);
   }
 
   async function handlePaymentToken(sourceId: string) {
@@ -559,24 +564,32 @@ export function BookingForm({
           specialInstructions={specialInstructions}
           setSpecialInstructions={setSpecialInstructions}
           pricing={pricing}
-          onBack={() => setStep(2)} onNext={createBookingAndAdvanceToPay}
+          onBack={() => setStep(2)} onNext={createBookingAndAdvanceToSign}
           submitting={creatingBooking}
         />
       )}
 
-      {step === 4 && pricing && (
+      {step === 4 && bookingId && (
+        <StepSign
+          bookingId={bookingId}
+          onSigned={handleSignatureComplete}
+          onBack={() => setStep(3)}
+        />
+      )}
+
+      {step === 5 && pricing && (
         <StepPay totalCents={pricing.totalCents}
           applicationId={SQUARE_APP_ID} locationId={SQUARE_LOC_ID}
           customerPostalCode={customer.customer_postal_code}
           paying={paying} onPaymentToken={handlePaymentToken}
-          onBack={() => setStep(3)} />
+          onBack={() => setStep(4)} />
       )}
     </div>
   );
 }
 
 function StepIndicator({ step }: { step: Step }) {
-  const labels = ["Configure", "Your info", "Review", "Pay"];
+  const labels = ["Configure", "Your info", "Review", "Sign", "Pay"];
   return (
     <ol className="mb-10 flex flex-wrap items-center gap-2 font-mono text-xs uppercase tracking-widest">
       {labels.map((label, i) => {
@@ -1130,7 +1143,7 @@ function StepReview(props: {
         </button>
         <button type="button" onClick={onNext} disabled={submitting}
           className="rounded-full bg-accent px-8 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
-          {submitting ? "Saving booking…" : "Continue to payment →"}
+          {submitting ? "Saving booking…" : "Continue to sign →"}
         </button>
       </div>
     </section>
@@ -1169,7 +1182,133 @@ function SummaryBlock({ title, children }: { title: string; children: React.Reac
   );
 }
 
-// --- Step 4: Pay ------------------------------------------------------------
+// --- Step 4: Sign -----------------------------------------------------------
+
+function StepSign({
+  bookingId,
+  onSigned,
+  onBack,
+}: {
+  bookingId: string;
+  onSigned: () => void;
+  onBack: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"loading" | "open" | "finalizing" | "done">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    type HelloSignInstance = {
+      open: (url: string, opts?: { testMode?: boolean; skipDomainVerification?: boolean }) => void;
+      on: (event: string, cb: (data?: unknown) => void) => void;
+      close: () => void;
+    };
+    let client: HelloSignInstance | null = null;
+
+    (async () => {
+      const clientId = process.env.NEXT_PUBLIC_HELLOSIGN_CLIENT_ID;
+      if (!clientId) {
+        setError("NEXT_PUBLIC_HELLOSIGN_CLIENT_ID is not configured");
+        return;
+      }
+      // Dynamic import: hellosign-embedded touches `window` at module load,
+      // so importing statically breaks Next.js's server bundle.
+      const mod = await import("hellosign-embedded");
+      if (cancelled) return;
+      const HelloSign = mod.default as new (opts: { clientId: string }) => HelloSignInstance;
+      client = new HelloSign({ clientId });
+
+      client.on("sign", async () => {
+        setPhase("finalizing");
+        try {
+          const res = await fetch(`/api/bookings/${bookingId}/finalize-signature`, { method: "POST" });
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            setError(json.error ?? "Failed to confirm signature");
+            setPhase("open");
+            return;
+          }
+          setPhase("done");
+          onSigned();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to confirm signature");
+          setPhase("open");
+        }
+      });
+
+      client.on("error", (data: unknown) => {
+        const msg = (data as { message?: string } | undefined)?.message;
+        setError(`Signing error: ${msg ?? "unknown"}`);
+      });
+
+      try {
+        const res = await fetch(`/api/bookings/${bookingId}/start-signature`, { method: "POST" });
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok || !json.sign_url) {
+          setError(json.error ?? "Failed to start signing");
+          return;
+        }
+        setPhase("open");
+        client.open(json.sign_url, { testMode: true, skipDomainVerification: true });
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to start signing");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      try { client?.close(); } catch { /* noop */ }
+    };
+  }, [bookingId, onSigned]);
+
+  return (
+    <section className="space-y-6">
+      <div>
+        <h2 className="font-display text-2xl font-semibold">Sign your rental agreement</h2>
+        <p className="mt-1 text-sm text-muted">
+          The agreement will open in a signing window. Review carefully, sign at the bottom, and submit.
+          Your signed copy will be stored with the booking and emailed to you after payment.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {error}
+        </div>
+      )}
+      {phase === "loading" && (
+        <div className="rounded-lg border border-ink/15 bg-paper px-4 py-3 text-sm text-muted">
+          Preparing your agreement…
+        </div>
+      )}
+      {phase === "open" && !error && (
+        <div className="rounded-lg border border-ink/15 bg-paper px-4 py-3 text-sm text-muted">
+          The signing window should be open. If you closed it accidentally, click <strong>Back</strong> then <strong>Continue to sign</strong> to reopen.
+        </div>
+      )}
+      {phase === "finalizing" && (
+        <div className="rounded-lg border border-ink/15 bg-paper px-4 py-3 text-sm text-muted">
+          Verifying signature…
+        </div>
+      )}
+      {phase === "done" && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          ✓ Signature received — advancing to payment.
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <button type="button" onClick={onBack} disabled={phase === "finalizing"}
+          className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 disabled:opacity-50 transition-colors">
+          ← Back
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// --- Step 5: Pay ------------------------------------------------------------
 
 function StepPay({
   totalCents, applicationId, locationId, customerPostalCode, paying,

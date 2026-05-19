@@ -111,7 +111,7 @@ export async function POST(req: Request) {
       end_date: booking.end_date,
       dropoff_time: booking.dropoff_time,
       special_instructions: booking.special_instructions ?? null,
-      status: "pending_payment",
+      status: "pending_signature",
       total_cents: pricing.totalCents,
     })
     .select("id")
