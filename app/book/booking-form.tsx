@@ -76,14 +76,24 @@ function formatDateRange(startISO: string, endISO: string): string {
   if (!startISO || !endISO) return "";
   const s = new Date(startISO + "T00:00:00");
   const e = new Date(endISO + "T00:00:00");
-  const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
-  const sFmt = s.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
-  const eFmt = e.toLocaleDateString("en-CA", {
-    month: sameMonth ? undefined : "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${sFmt} – ${eFmt}`;
+  const sameYear  = s.getFullYear() === e.getFullYear();
+  const sameMonth = sameYear && s.getMonth() === e.getMonth();
+  const sameDay   = sameMonth && s.getDate() === e.getDate();
+
+  if (sameDay) {
+    return s.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+  }
+  if (sameMonth) {
+    // "May 27 – 29, 2026"
+    return `${s.toLocaleDateString("en-CA", { month: "short", day: "numeric" })} – ${e.toLocaleDateString("en-CA", { day: "numeric", year: "numeric" })}`;
+  }
+  if (sameYear) {
+    // "Jun 24 – Jul 31, 2026"
+    return `${s.toLocaleDateString("en-CA", { month: "short", day: "numeric" })} – ${e.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}`;
+  }
+  // "Dec 30, 2026 – Jan 5, 2027"
+  const opts = { month: "short", day: "numeric", year: "numeric" } as const;
+  return `${s.toLocaleDateString("en-CA", opts)} – ${e.toLocaleDateString("en-CA", opts)}`;
 }
 
 // Mirrors the DB trigger's overlap logic: both ranges are treated as
@@ -561,10 +571,10 @@ function StepConfigure(props: {
 
         {equipmentId && !loadingAvailability && blockedRanges.length > 0 && (
           <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <p className="font-medium">This machine is already booked on:</p>
+            <p className="font-medium">This machine is unavailable on:</p>
             <ul className="mt-1 list-disc pl-5">
               {blockedRanges.map((r, i) => (
-                <li key={i}>{formatDateRange(r.start_date, r.end_date)} <span className="text-amber-700">(+1 inspection day)</span></li>
+                <li key={i}>{formatDateRange(r.start_date, addOneDay(r.end_date))}</li>
               ))}
             </ul>
           </div>
@@ -574,7 +584,7 @@ function StepConfigure(props: {
           <div className="mt-4 rounded-lg border border-red-400 bg-red-50 px-4 py-3 text-sm text-red-900">
             <p className="font-medium">Your selected dates overlap with an existing booking</p>
             <p className="mt-1">
-              Conflicts with <strong>{formatDateRange(currentConflict.start_date, currentConflict.end_date)}</strong>.
+              Unavailable: <strong>{formatDateRange(currentConflict.start_date, addOneDay(currentConflict.end_date))}</strong>.
               Pick a different range to continue.
             </p>
           </div>
