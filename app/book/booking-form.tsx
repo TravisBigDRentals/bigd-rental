@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import type { Addon, Equipment } from "@/lib/bookings/queries";
@@ -72,6 +72,31 @@ function formatLongDate(iso: string): string {
   });
 }
 
+function formatDateRange(startISO: string, endISO: string): string {
+  if (!startISO || !endISO) return "";
+  const s = new Date(startISO + "T00:00:00");
+  const e = new Date(endISO + "T00:00:00");
+  const sameMonth = s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear();
+  const sFmt = s.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
+  const eFmt = e.toLocaleDateString("en-CA", {
+    month: sameMonth ? undefined : "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `${sFmt} – ${eFmt}`;
+}
+
+// Mirrors the DB trigger's overlap logic: both ranges are treated as
+// [start, end + 1 day] inclusive (the +1 is the inspection-day buffer).
+function rangesConflictWithBuffer(s1: string, e1: string, s2: string, e2: string): boolean {
+  if (!s1 || !e1 || !s2 || !e2) return false;
+  const ms = (iso: string) => new Date(iso + "T00:00:00").getTime();
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  const s1m = ms(s1), e1m = ms(e1) + ONE_DAY;
+  const s2m = ms(s2), e2m = ms(e2) + ONE_DAY;
+  return s1m <= e2m && s2m <= e1m;
+}
+
 export function BookingForm({
   equipment,
   addons,
@@ -95,6 +120,52 @@ export function BookingForm({
   const [uploadingBack, setUploadingBack] = useState(false);
   const [creatingBooking, setCreatingBooking] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [blockedRanges, setBlockedRanges] = useState<{ start_date: string; end_date: string }[]>([]);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+
+  // Scroll error into view when one appears — error banner is at the top of the
+  // form; user has typically scrolled down by the time they hit Next.
+  useEffect(() => {
+    if (error) window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [error]);
+
+  // Fetch all booked ranges for the selected equipment so we can show them
+  // inline and disable Next when the picked dates conflict — better UX than
+  // surfacing the conflict only after the user clicks Next.
+  useEffect(() => {
+    if (!equipmentId) {
+      setBlockedRanges([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingAvailability(true);
+    const today = todayISO();
+    const oneYearOut = (() => {
+      const d = new Date();
+      d.setFullYear(d.getFullYear() + 1);
+      return d.toISOString().slice(0, 10);
+    })();
+    fetch("/api/bookings/availability", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ equipment_id: equipmentId, start_date: today, end_date: oneYearOut }),
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (cancelled) return;
+        setBlockedRanges(Array.isArray(json.conflicts) ? json.conflicts : []);
+      })
+      .catch(() => { if (!cancelled) setBlockedRanges([]); })
+      .finally(() => { if (!cancelled) setLoadingAvailability(false); });
+    return () => { cancelled = true; };
+  }, [equipmentId]);
+
+  const currentConflict = useMemo(() => {
+    if (!startDate || !endDate || !blockedRanges.length) return null;
+    return blockedRanges.find((r) =>
+      rangesConflictWithBuffer(startDate, endDate, r.start_date, r.end_date),
+    ) ?? null;
+  }, [startDate, endDate, blockedRanges]);
 
   const selectedEquipment = useMemo(
     () => equipment.find((e) => e.id === equipmentId) ?? null,
@@ -331,6 +402,9 @@ export function BookingForm({
           compatibleAddons={compatibleAddons}
           addonIds={addonIds} toggleAddon={toggleAddon}
           pricing={pricing}
+          blockedRanges={blockedRanges}
+          loadingAvailability={loadingAvailability}
+          currentConflict={currentConflict}
           onNext={goToStep2} loading={checkingAvailability}
         />
       )}
@@ -410,6 +484,9 @@ function StepConfigure(props: {
   compatibleAddons: Addon[];
   addonIds: string[]; toggleAddon: (id: string) => void;
   pricing: ReturnType<typeof calculatePricing> | null;
+  blockedRanges: { start_date: string; end_date: string }[];
+  loadingAvailability: boolean;
+  currentConflict: { start_date: string; end_date: string } | null;
   onNext: () => void; loading: boolean;
 }) {
   const {
@@ -417,7 +494,9 @@ function StepConfigure(props: {
     startDate, setStartDate, endDate, setEndDate, pickupDate,
     dropoffTime, setDropoffTime,
     compatibleAddons, addonIds, toggleAddon,
-    pricing, onNext, loading,
+    pricing,
+    blockedRanges, loadingAvailability, currentConflict,
+    onNext, loading,
   } = props;
 
   return (
@@ -479,6 +558,27 @@ function StepConfigure(props: {
             </p>
           </div>
         )}
+
+        {equipmentId && !loadingAvailability && blockedRanges.length > 0 && (
+          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-medium">This machine is already booked on:</p>
+            <ul className="mt-1 list-disc pl-5">
+              {blockedRanges.map((r, i) => (
+                <li key={i}>{formatDateRange(r.start_date, r.end_date)} <span className="text-amber-700">(+1 inspection day)</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {currentConflict && (
+          <div className="mt-4 rounded-lg border border-red-400 bg-red-50 px-4 py-3 text-sm text-red-900">
+            <p className="font-medium">Your selected dates overlap with an existing booking</p>
+            <p className="mt-1">
+              Conflicts with <strong>{formatDateRange(currentConflict.start_date, currentConflict.end_date)}</strong>.
+              Pick a different range to continue.
+            </p>
+          </div>
+        )}
       </div>
 
       {equipmentId && compatibleAddons.length > 0 && (
@@ -522,7 +622,7 @@ function StepConfigure(props: {
       )}
 
       <div className="flex justify-end">
-        <button type="button" onClick={onNext} disabled={loading || !equipmentId}
+        <button type="button" onClick={onNext} disabled={loading || !equipmentId || !!currentConflict}
           className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
           {loading ? "Checking availability…" : "Next: your info →"}
         </button>
@@ -599,8 +699,10 @@ function StepCustomer(props: {
       </div>
 
       <div>
-        <h2 className="font-display text-2xl font-semibold">Customer address</h2>
-        <p className="mt-1 text-sm text-muted">Your home or business address.</p>
+        <h2 className="font-display text-2xl font-semibold">Billing Address</h2>
+        <p className="mt-1 text-sm text-muted">
+          Please enter the legal address for your business and or billing address for the credit card that will be used for payment.
+        </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="Address line 1 *" className="sm:col-span-2">
             <input type="text" value={customer.customer_address_line1}
@@ -632,7 +734,9 @@ function StepCustomer(props: {
 
       <div>
         <h2 className="font-display text-2xl font-semibold">Project address</h2>
-        <p className="mt-1 text-sm text-muted">Where the equipment will be used (job site).</p>
+        <p className="mt-1 text-sm text-muted">
+          Where the equipment will be dropped off to and used (job site). The equipment will also be collected from this address.
+        </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="Address line 1 *" className="sm:col-span-2">
             <input type="text" value={customer.project_address_line1}
