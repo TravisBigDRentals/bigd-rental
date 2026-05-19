@@ -50,13 +50,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: error?.message ?? "Booking not found" }, { status: 404 });
   }
   const booking = data as unknown as NestedBooking;
-  const customer = booking.customer;
-  const equipment = booking.equipment;
+  // Supabase nested FK selects sometimes return single-FK relations as an
+  // array-of-one rather than a bare object. Defensive unwrap.
+  function unwrap<T>(v: T | T[] | null | undefined): T | null {
+    if (!v) return null;
+    return Array.isArray(v) ? v[0] ?? null : v;
+  }
+  const customer = unwrap<CustomerLike>(booking.customer as CustomerLike | CustomerLike[] | null);
+  const equipment = unwrap<EquipmentLike>(booking.equipment as EquipmentLike | EquipmentLike[] | null);
   if (!customer || !equipment) {
     return NextResponse.json({ error: "Booking is missing customer or equipment" }, { status: 500 });
   }
+  if (!customer.email || !customer.first_name) {
+    return NextResponse.json({ error: "Customer record is missing email or name" }, { status: 500 });
+  }
   const addons: AddonLike[] = (booking.booking_addons ?? [])
-    .map((ba) => ba.addon)
+    .map((ba) => unwrap<AddonLike>(ba.addon as AddonLike | AddonLike[] | null))
     .filter((a): a is AddonLike => !!a);
 
   const sigApi = signatureRequestApi();
@@ -82,17 +91,24 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const customFields = buildMergeFields(customer, booking, equipment, addons);
 
   try {
-    console.log("[start-signature] creating request", { bookingId: id, templateId: templateId(), clientId: clientId(), fieldCount: customFields.length });
+    const signerPayload = {
+      role: "Renter",
+      emailAddress: customer.email,
+      name: `${customer.first_name} ${customer.last_name}`.trim(),
+    };
+    console.log("[start-signature] payload", {
+      bookingId: id,
+      templateId: templateId(),
+      clientId: clientId(),
+      signer: signerPayload,
+      fieldCount: customFields.length,
+    });
     const resp = await sigApi.signatureRequestCreateEmbeddedWithTemplate({
       clientId: clientId(),
       templateIds: [templateId()],
       subject: `Rental Agreement — ${equipment.name}`,
       message: "Please review and sign your equipment rental agreement.",
-      signers: [{
-        role: "Renter",
-        emailAddress: customer.email,
-        name: `${customer.first_name} ${customer.last_name}`.trim(),
-      }],
+      signers: [signerPayload],
       customFields,
       testMode: true,
     });
