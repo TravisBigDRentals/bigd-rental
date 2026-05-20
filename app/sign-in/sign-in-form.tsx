@@ -5,8 +5,8 @@ import { customerSignInAction, customerSignUpAction } from "./actions";
 
 type Mode = "signin" | "signup";
 
-export function CustomerAuthForm({ next }: { next: string }) {
-  const [mode, setMode] = useState<Mode>("signin");
+export function CustomerAuthForm({ next, initialMode = "signin" }: { next: string; initialMode?: Mode }) {
+  const [mode, setMode] = useState<Mode>(initialMode);
   const action = mode === "signin" ? customerSignInAction : customerSignUpAction;
   const [state, formAction, pending] = useActionState(action, null);
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatCents } from "@/lib/pricing";
+import { SiteNav } from "@/components/site-nav";
 
 export const metadata = {
   title: "Booking received — Big D's Rental Co.",
@@ -29,6 +30,8 @@ export default async function ConfirmedPage({
   if (!booking) notFound();
 
   return (
+  <>
+    <SiteNav />
     <main className="flex-1 px-6 py-16">
       <div className="max-w-2xl mx-auto">
         <p className="font-mono text-xs tracking-widest text-muted uppercase">
@@ -99,5 +102,6 @@ export default async function ConfirmedPage({
         </div>
       </div>
     </main>
+  </>
   );
 }

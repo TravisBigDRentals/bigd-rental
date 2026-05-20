@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { listAddons, listEquipment } from "@/lib/bookings/queries";
 import { getCurrentCustomer } from "@/lib/customers/current";
 import { BookingForm } from "./booking-form";
-import { customerSignOutAction } from "@/app/sign-in/actions";
+import { SiteNav } from "@/components/site-nav";
 
 export const metadata = {
   title: "Book Equipment — Big D's Rental Co.",
@@ -16,18 +15,17 @@ export default async function BookPage() {
   ]);
 
   return (
+  <>
+    <SiteNav />
     <main className="flex-1 px-6 py-12 sm:py-16">
       <div className="max-w-3xl mx-auto">
-        <header className="mb-10 flex items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-xs tracking-widest text-muted uppercase">
-              Calgary, AB · Construction Equipment Rental
-            </p>
-            <h1 className="mt-2 font-display text-4xl sm:text-5xl font-bold tracking-tight">
-              Book Equipment
-            </h1>
-          </div>
-          <AuthChip current={current} />
+        <header className="mb-10">
+          <p className="font-mono text-xs tracking-widest text-muted uppercase">
+            Calgary, AB · Construction Equipment Rental
+          </p>
+          <h1 className="mt-2 font-display text-4xl sm:text-5xl font-bold tracking-tight">
+            Book Equipment
+          </h1>
         </header>
 
         {current && !current.customer && (
@@ -52,28 +50,6 @@ export default async function BookPage() {
         />
       </div>
     </main>
-  );
-}
-
-function AuthChip({ current }: { current: Awaited<ReturnType<typeof getCurrentCustomer>> }) {
-  if (!current) {
-    return (
-      <Link
-        href="/sign-in?next=/book"
-        className="rounded-full border border-ink/15 px-4 py-2 text-sm font-medium hover:bg-ink/5 transition-colors"
-      >
-        Sign in
-      </Link>
-    );
-  }
-  return (
-    <form action={customerSignOutAction}>
-      <button
-        type="submit"
-        className="rounded-full border border-ink/15 px-4 py-2 text-sm font-medium hover:bg-ink/5 transition-colors"
-      >
-        Sign out
-      </button>
-    </form>
+  </>
   );
 }
