@@ -88,7 +88,9 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const from = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
-  const adminCc = process.env.BIGDS_ADMIN_EMAIL || undefined;
+  // Normalize to lowercase. Resend's test-mode whitelist match is
+  // case-sensitive, and the env var's casing is too easy to get wrong.
+  const adminCc = process.env.BIGDS_ADMIN_EMAIL?.toLowerCase() || undefined;
 
   const addressLine = [customer.project_address_line1, customer.project_city, customer.project_province, customer.project_postal_code]
     .filter(Boolean)
@@ -100,7 +102,7 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
   // useful, regardless of what the test customer typed. Production
   // (SQUARE_ENVIRONMENT=production) sends to the real customer.
   const isSandbox = (process.env.SQUARE_ENVIRONMENT ?? "sandbox") !== "production";
-  const intendedRecipient = customer.email;
+  const intendedRecipient = customer.email.toLowerCase();
   const recipient = isSandbox ? (adminCc ?? intendedRecipient) : intendedRecipient;
   const cc = isSandbox ? undefined : adminCc;
   const subjectPrefix = isSandbox ? "[TEST] " : "";
