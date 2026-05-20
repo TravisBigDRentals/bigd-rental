@@ -42,6 +42,8 @@ type BookingDetail = {
   payment_intent_id: string | null;
   paid_at: string | null;
   signed_agreement_pdf_url: string | null;
+  drivers_license_front_url: string | null;
+  drivers_license_back_url: string | null;
   delivered_at: string | null;
   returned_at: string | null;
   created_at: string;
@@ -72,6 +74,7 @@ export default async function BookingDetailPage({
     .select(`
       id, start_date, end_date, dropoff_time, special_instructions, status,
       total_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
+      drivers_license_front_url, drivers_license_back_url,
       delivered_at, returned_at, created_at,
       customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
       equipment:equipment_id ( name, serial ),
@@ -83,9 +86,14 @@ export default async function BookingDetailPage({
   if (error || !data) notFound();
   const booking = data as unknown as BookingDetail;
 
+  // Per-booking DL snapshot is the authoritative reference (added via
+  // migration 0008). Fall back to customer.drivers_license_*_url for
+  // historical bookings created before the snapshot was wired up.
+  const dlFrontPath = booking.drivers_license_front_url ?? booking.customer?.drivers_license_front_url ?? null;
+  const dlBackPath = booking.drivers_license_back_url ?? booking.customer?.drivers_license_back_url ?? null;
   const [dlFrontUrl, dlBackUrl] = await Promise.all([
-    signedDlUrl(booking.customer?.drivers_license_front_url ?? null),
-    signedDlUrl(booking.customer?.drivers_license_back_url ?? null),
+    signedDlUrl(dlFrontPath),
+    signedDlUrl(dlBackPath),
   ]);
 
   const customer = booking.customer;

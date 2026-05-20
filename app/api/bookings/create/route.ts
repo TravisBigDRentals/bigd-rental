@@ -150,7 +150,10 @@ export async function POST(req: Request) {
     customerRowId = row.id;
   }
 
-  // Insert booking
+  // Insert booking — capture DL paths on the booking itself so each
+  // booking has its own immutable audit record of what license was on
+  // file at the moment of rental. The customer row tracks "latest",
+  // the booking row tracks "at-the-time-of-this-rental".
   const { data: bookingRow, error: bookErr } = await supabase
     .from("bookings")
     .insert({
@@ -162,6 +165,8 @@ export async function POST(req: Request) {
       special_instructions: booking.special_instructions ?? null,
       status: "pending_signature",
       total_cents: pricing.totalCents,
+      drivers_license_front_url: customer.drivers_license_front_path,
+      drivers_license_back_url: customer.drivers_license_back_path,
     })
     .select("id")
     .single();
