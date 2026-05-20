@@ -264,13 +264,21 @@ export function BookingForm({
   // Anonymous bookings and signed-in customers without a stored license
   // always re-upload.
   const hasPreviousLicense = !!(initialCustomer?.drivers_license_front_url && initialCustomer?.drivers_license_back_url);
-  type LicenseChoice = "confirm" | "reupload";
+  type LicenseChoice = "confirm" | "reupload" | null;
+  // Default is null when a previous license exists — the customer must
+  // explicitly check one box. Liability: we shouldn't auto-affirm on
+  // their behalf. Anonymous / first-time customers default to "reupload"
+  // (no previous license to confirm).
   const [licenseChoice, setLicenseChoice] = useState<LicenseChoice>(
-    hasPreviousLicense ? "confirm" : "reupload",
+    hasPreviousLicense ? null : "reupload",
   );
 
-  // Keep license paths in sync with the choice: confirm restores the
-  // originals, reupload clears them so the user must upload fresh.
+  // Paths in state are pre-populated from initialCustomer when there's a
+  // previous license. They stay until the user picks "reupload", at which
+  // point we clear them so they have to upload fresh files. Confirm
+  // restores the originals (in case the user toggled to reupload then
+  // back). Null choice = paths stay as-is (originals) but validation
+  // blocks Next.
   useEffect(() => {
     if (!hasPreviousLicense) return;
     if (licenseChoice === "confirm" && initialCustomer) {
@@ -481,6 +489,9 @@ export function BookingForm({
     if (!customer.last_name.trim()) return setError("Last name is required");
     if (!customer.email.trim()) return setError("Email is required");
     if (!customer.phone.trim()) return setError("Phone is required");
+    if (hasPreviousLicense && licenseChoice === null) {
+      return setError("Confirm your previous driver's license is still valid, or choose to re-upload");
+    }
     if (!customer.drivers_license_front_path) return setError("Driver's license (front) is required");
     if (!customer.drivers_license_back_path) return setError("Driver's license (back) is required");
     if (!customer.customer_address_line1.trim()) return setError("Customer address is required");
@@ -889,8 +900,8 @@ function StepCustomer(props: {
   updateCustomer: <K extends keyof CustomerState>(key: K, value: CustomerState[K]) => void;
   emailLocked: boolean;
   hasPreviousLicense: boolean;
-  licenseChoice: "confirm" | "reupload";
-  setLicenseChoice: (c: "confirm" | "reupload") => void;
+  licenseChoice: "confirm" | "reupload" | null;
+  setLicenseChoice: (c: "confirm" | "reupload" | null) => void;
   onDLFrontChange: (file: File | null) => void;
   onDLBackChange: (file: File | null) => void;
   uploadingFront: boolean;
@@ -959,7 +970,7 @@ function StepCustomer(props: {
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
                   checked={licenseChoice === "confirm"}
-                  onChange={(e) => { if (e.target.checked) setLicenseChoice("confirm"); }}
+                  onChange={(e) => setLicenseChoice(e.target.checked ? "confirm" : null)}
                 />
                 <span className="text-sm">
                   I confirm my previously uploaded license is up to date and valid in Alberta, Canada.
@@ -972,7 +983,7 @@ function StepCustomer(props: {
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
                   checked={licenseChoice === "reupload"}
-                  onChange={(e) => { if (e.target.checked) setLicenseChoice("reupload"); }}
+                  onChange={(e) => setLicenseChoice(e.target.checked ? "reupload" : null)}
                 />
                 <span className="text-sm">
                   I would like to re-upload my license.
