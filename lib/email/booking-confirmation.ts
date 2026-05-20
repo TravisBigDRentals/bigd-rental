@@ -15,6 +15,8 @@ type Customer = {
 
 type Equipment = { name: string; serial: string };
 
+type AddonRow = { name: string; daily_rate_cents: number };
+
 type BookingRow = {
   id: string;
   start_date: string;
@@ -26,6 +28,7 @@ type BookingRow = {
   email_sent_at: string | null;
   customer: Customer | Customer[] | null;
   equipment: Equipment | Equipment[] | null;
+  booking_addons: { addon: AddonRow | AddonRow[] | null }[] | null;
 };
 
 function unwrap<T>(v: T | T[] | null | undefined): T | null {
@@ -48,7 +51,8 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
       id, start_date, end_date, dropoff_time, total_cents, status,
       signed_agreement_pdf_url, email_sent_at,
       equipment:equipment_id ( name, serial ),
-      customer:customer_id ( first_name, last_name, email, project_address_line1, project_city, project_province, project_postal_code )
+      customer:customer_id ( first_name, last_name, email, project_address_line1, project_city, project_province, project_postal_code ),
+      booking_addons ( addon:addon_id ( name, daily_rate_cents ) )
     `)
     .eq("id", bookingId)
     .single();
@@ -62,6 +66,9 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
   const customer = unwrap(booking.customer);
   const equipment = unwrap(booking.equipment);
   if (!customer || !equipment) return { sent: false, reason: "booking missing customer or equipment" };
+  const addons: AddonRow[] = (booking.booking_addons ?? [])
+    .map((ba) => unwrap(ba.addon))
+    .filter((a): a is AddonRow => !!a);
 
   // Race-safe claim: atomic UPDATE that only succeeds if email_sent_at is
   // still null. If someone else got there first, this affects 0 rows and we
@@ -127,6 +134,7 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
       addressLine,
       totalCents: booking.total_cents,
       bookingId: booking.id,
+      addons,
     }),
     attachments: [
       { filename: `rental-agreement-${booking.id}.pdf`, content: pdfBuffer },
@@ -142,6 +150,15 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
   return { sent: true, messageId: result.data?.id };
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function htmlBody(v: {
   firstName: string;
   equipmentName: string;
@@ -152,17 +169,26 @@ function htmlBody(v: {
   addressLine: string;
   totalCents: number;
   bookingId: string;
+  addons: AddonRow[];
 }): string {
+  const addonsCell = v.addons.length === 0
+    ? "None"
+    : v.addons
+        .map((a, i) => i === 0
+          ? `${escapeHtml(a.name)} <span style="color:#7A766F;">(free)</span>`
+          : `${escapeHtml(a.name)} <span style="color:#7A766F;">(${formatCents(a.daily_rate_cents)}/day)</span>`)
+        .join("<br>");
   return `
     <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #0F1114;">
-      <h1 style="font-size: 24px; margin-bottom: 16px;">Booking confirmed, ${v.firstName}.</h1>
+      <h1 style="font-size: 24px; margin-bottom: 16px;">Booking confirmed, ${escapeHtml(v.firstName)}.</h1>
       <p>Your payment is received and your equipment is locked in for the dates below. The signed rental agreement is attached to this email.</p>
       <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
-        <tr><td style="padding: 8px 0; color: #7A766F;">Equipment</td><td style="padding: 8px 0; text-align: right;">${v.equipmentName}</td></tr>
-        <tr><td style="padding: 8px 0; color: #7A766F;">Serial</td><td style="padding: 8px 0; text-align: right; font-family: monospace; font-size: 13px;">${v.equipmentSerial}</td></tr>
-        <tr><td style="padding: 8px 0; color: #7A766F;">Delivery</td><td style="padding: 8px 0; text-align: right;">${v.startDate}${v.dropoffTime ? ` at ${v.dropoffTime}` : ""}</td></tr>
-        <tr><td style="padding: 8px 0; color: #7A766F;">Pickup</td><td style="padding: 8px 0; text-align: right;">${v.endDate}${v.dropoffTime ? ` at ${v.dropoffTime}` : ""}</td></tr>
-        <tr><td style="padding: 8px 0; color: #7A766F;">Project address</td><td style="padding: 8px 0; text-align: right;">${v.addressLine || "—"}</td></tr>
+        <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Equipment</td><td style="padding: 8px 0; text-align: right;">${escapeHtml(v.equipmentName)}</td></tr>
+        <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Serial</td><td style="padding: 8px 0; text-align: right; font-family: monospace; font-size: 13px;">${escapeHtml(v.equipmentSerial)}</td></tr>
+        <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Add-ons</td><td style="padding: 8px 0; text-align: right;">${addonsCell}</td></tr>
+        <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Delivery</td><td style="padding: 8px 0; text-align: right;">${v.startDate}${v.dropoffTime ? ` at ${v.dropoffTime}` : ""}</td></tr>
+        <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Pickup</td><td style="padding: 8px 0; text-align: right;">${v.endDate}${v.dropoffTime ? ` at ${v.dropoffTime}` : ""}</td></tr>
+        <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Project address</td><td style="padding: 8px 0; text-align: right;">${escapeHtml(v.addressLine) || "—"}</td></tr>
         <tr style="border-top: 1px solid #E5DFD3;"><td style="padding: 12px 0 0; font-weight: 600;">Total paid</td><td style="padding: 12px 0 0; text-align: right; font-weight: 600;">${formatCents(v.totalCents)} CAD</td></tr>
       </table>
       <p style="font-family: monospace; font-size: 12px; color: #7A766F;">Booking ID: ${v.bookingId}</p>
