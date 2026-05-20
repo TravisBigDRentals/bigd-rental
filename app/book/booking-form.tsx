@@ -190,6 +190,8 @@ type InitialCustomer = {
   business_name: string | null;
   email: string;
   phone: string;
+  drivers_license_front_url: string;
+  drivers_license_back_url: string;
   customer_address_line1: string;
   customer_address_line2: string | null;
   customer_city: string;
@@ -214,8 +216,11 @@ function customerStateFromInitial(c: InitialCustomer | null, authEmail: string |
     business_name: c.business_name ?? "",
     email: c.email,
     phone: c.phone,
-    drivers_license_front_path: null,
-    drivers_license_back_path: null,
+    // License paths from the saved customer record — when the user
+    // confirms their previous license is still valid, we round-trip
+    // these paths back to /api/bookings/create unchanged.
+    drivers_license_front_path: c.drivers_license_front_url,
+    drivers_license_back_path: c.drivers_license_back_url,
     customer_address_line1: c.customer_address_line1,
     customer_address_line2: c.customer_address_line2 ?? "",
     customer_city: c.customer_city,
@@ -252,6 +257,36 @@ export function BookingForm({
   const [customer, setCustomer] = useState<CustomerState>(
     () => customerStateFromInitial(initialCustomer, authEmail),
   );
+
+  // License flow: if the signed-in customer has a previously uploaded
+  // license on file, default to "confirm" (no re-upload required) and let
+  // them switch to "reupload" via the checkbox if their license changed.
+  // Anonymous bookings and signed-in customers without a stored license
+  // always re-upload.
+  const hasPreviousLicense = !!(initialCustomer?.drivers_license_front_url && initialCustomer?.drivers_license_back_url);
+  type LicenseChoice = "confirm" | "reupload";
+  const [licenseChoice, setLicenseChoice] = useState<LicenseChoice>(
+    hasPreviousLicense ? "confirm" : "reupload",
+  );
+
+  // Keep license paths in sync with the choice: confirm restores the
+  // originals, reupload clears them so the user must upload fresh.
+  useEffect(() => {
+    if (!hasPreviousLicense) return;
+    if (licenseChoice === "confirm" && initialCustomer) {
+      setCustomer((prev) => ({
+        ...prev,
+        drivers_license_front_path: initialCustomer.drivers_license_front_url,
+        drivers_license_back_path: initialCustomer.drivers_license_back_url,
+      }));
+    } else if (licenseChoice === "reupload") {
+      setCustomer((prev) => ({
+        ...prev,
+        drivers_license_front_path: null,
+        drivers_license_back_path: null,
+      }));
+    }
+  }, [licenseChoice, hasPreviousLicense, initialCustomer]);
   const [specialInstructions, setSpecialInstructions] = useState<string>("");
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -577,6 +612,9 @@ export function BookingForm({
         <StepCustomer
           customer={customer} updateCustomer={updateCustomer}
           emailLocked={isAuthenticated}
+          hasPreviousLicense={hasPreviousLicense}
+          licenseChoice={licenseChoice}
+          setLicenseChoice={setLicenseChoice}
           onDLFrontChange={(f) => uploadDL(f, "front")}
           onDLBackChange={(f) => uploadDL(f, "back")}
           uploadingFront={uploadingFront} uploadingBack={uploadingBack}
@@ -850,6 +888,9 @@ function StepCustomer(props: {
   customer: CustomerState;
   updateCustomer: <K extends keyof CustomerState>(key: K, value: CustomerState[K]) => void;
   emailLocked: boolean;
+  hasPreviousLicense: boolean;
+  licenseChoice: "confirm" | "reupload";
+  setLicenseChoice: (c: "confirm" | "reupload") => void;
   onDLFrontChange: (file: File | null) => void;
   onDLBackChange: (file: File | null) => void;
   uploadingFront: boolean;
@@ -859,6 +900,7 @@ function StepCustomer(props: {
 }) {
   const {
     customer, updateCustomer, emailLocked,
+    hasPreviousLicense, licenseChoice, setLicenseChoice,
     onDLFrontChange, onDLBackChange,
     uploadingFront, uploadingBack,
     onBack, onNext,
@@ -903,13 +945,60 @@ function StepCustomer(props: {
 
       <div>
         <h2 className="font-display text-2xl font-semibold">Driver&rsquo;s license</h2>
-        <p className="mt-1 text-sm text-muted">Photo or PDF, both sides. Max 10 MB each.</p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <DLDropZone label="LICENSE FRONT" uploaded={!!customer.drivers_license_front_path}
-            uploading={uploadingFront} onChange={onDLFrontChange} side="Front" />
-          <DLDropZone label="LICENSE BACK" uploaded={!!customer.drivers_license_back_path}
-            uploading={uploadingBack} onChange={onDLBackChange} side="Back" />
-        </div>
+
+        {hasPreviousLicense ? (
+          <>
+            <p className="mt-1 text-sm text-muted">
+              We have a driver&rsquo;s license on file from a previous booking. Confirm it&rsquo;s still valid, or re-upload if it&rsquo;s changed.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className={`flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+                licenseChoice === "confirm" ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30"
+              }`}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+                  checked={licenseChoice === "confirm"}
+                  onChange={(e) => { if (e.target.checked) setLicenseChoice("confirm"); }}
+                />
+                <span className="text-sm">
+                  I confirm my previously uploaded license is up to date and valid in Alberta, Canada.
+                </span>
+              </label>
+              <label className={`flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+                licenseChoice === "reupload" ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30"
+              }`}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+                  checked={licenseChoice === "reupload"}
+                  onChange={(e) => { if (e.target.checked) setLicenseChoice("reupload"); }}
+                />
+                <span className="text-sm">
+                  I would like to re-upload my license.
+                </span>
+              </label>
+            </div>
+            {licenseChoice === "reupload" && (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <DLDropZone label="LICENSE FRONT" uploaded={!!customer.drivers_license_front_path}
+                  uploading={uploadingFront} onChange={onDLFrontChange} side="Front" />
+                <DLDropZone label="LICENSE BACK" uploaded={!!customer.drivers_license_back_path}
+                  uploading={uploadingBack} onChange={onDLBackChange} side="Back" />
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-muted">Photo or PDF, both sides. Max 10 MB each.</p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <DLDropZone label="LICENSE FRONT" uploaded={!!customer.drivers_license_front_path}
+                uploading={uploadingFront} onChange={onDLFrontChange} side="Front" />
+              <DLDropZone label="LICENSE BACK" uploaded={!!customer.drivers_license_back_path}
+                uploading={uploadingBack} onChange={onDLBackChange} side="Back" />
+            </div>
+          </>
+        )}
       </div>
 
       <div>
