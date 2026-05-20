@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { updateAccountAction, type UpdateAccountResult } from "./actions";
+import { DLDropZone } from "@/components/dl-drop-zone";
 
 export type AccountInitial = {
   first_name: string;
@@ -186,24 +187,20 @@ export function AccountDetailsForm({ initial }: { initial: AccountInitial }) {
         )}
         {(replaceLicense || !initial.has_license) && (
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Field label="License front">
-              <input type="file" accept="image/*,application/pdf"
-                onChange={(e) => handleUpload(e.target.files?.[0] ?? null, "front")}
-                className="mt-1 w-full text-sm" />
-              {uploadingFront && <p className="mt-1 text-xs text-muted">Uploading…</p>}
-              {frontPath && !uploadingFront && (
-                <p className="mt-1 font-mono text-xs text-muted">✓ Uploaded</p>
-              )}
-            </Field>
-            <Field label="License back">
-              <input type="file" accept="image/*,application/pdf"
-                onChange={(e) => handleUpload(e.target.files?.[0] ?? null, "back")}
-                className="mt-1 w-full text-sm" />
-              {uploadingBack && <p className="mt-1 text-xs text-muted">Uploading…</p>}
-              {backPath && !uploadingBack && (
-                <p className="mt-1 font-mono text-xs text-muted">✓ Uploaded</p>
-              )}
-            </Field>
+            <DLDropZone
+              label="LICENSE FRONT"
+              side="Front"
+              uploaded={!!frontPath}
+              uploading={uploadingFront}
+              onChange={(f) => handleUpload(f, "front")}
+            />
+            <DLDropZone
+              label="LICENSE BACK"
+              side="Back"
+              uploaded={!!backPath}
+              uploading={uploadingBack}
+              onChange={(f) => handleUpload(f, "back")}
+            />
           </div>
         )}
         {uploadError && (
