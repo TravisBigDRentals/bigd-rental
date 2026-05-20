@@ -62,7 +62,15 @@ export default async function BookingsPage({
     <main className="max-w-6xl mx-auto px-6 py-10">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-3xl font-bold tracking-tight">Bookings</h1>
-        <p className="font-mono text-xs text-muted">{bookings.length} result{bookings.length === 1 ? "" : "s"}</p>
+        <div className="flex items-center gap-4">
+          <p className="font-mono text-xs text-muted">{bookings.length} result{bookings.length === 1 ? "" : "s"}</p>
+          <Link
+            href="/admin/account"
+            className="font-mono text-xs text-muted hover:text-ink uppercase tracking-widest"
+          >
+            Account
+          </Link>
+        </div>
       </div>
 
       <form className="mt-6 flex flex-wrap items-center gap-3">
