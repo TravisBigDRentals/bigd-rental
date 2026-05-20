@@ -184,12 +184,63 @@ function rangesConflictWithBuffer(s1: string, e1: string, s2: string, e2: string
   return s1m <= e2m && s2m <= e1m;
 }
 
+type InitialCustomer = {
+  first_name: string;
+  last_name: string;
+  business_name: string | null;
+  email: string;
+  phone: string;
+  customer_address_line1: string;
+  customer_address_line2: string | null;
+  customer_city: string;
+  customer_province: string;
+  customer_postal_code: string;
+  project_address_line1: string;
+  project_address_line2: string | null;
+  project_city: string;
+  project_province: string;
+  project_postal_code: string;
+};
+
+function customerStateFromInitial(c: InitialCustomer | null, authEmail: string | null): CustomerState {
+  if (!c) {
+    return authEmail
+      ? { ...EMPTY_CUSTOMER, email: authEmail }
+      : EMPTY_CUSTOMER;
+  }
+  return {
+    first_name: c.first_name,
+    last_name: c.last_name,
+    business_name: c.business_name ?? "",
+    email: c.email,
+    phone: c.phone,
+    drivers_license_front_path: null,
+    drivers_license_back_path: null,
+    customer_address_line1: c.customer_address_line1,
+    customer_address_line2: c.customer_address_line2 ?? "",
+    customer_city: c.customer_city,
+    customer_province: c.customer_province,
+    customer_postal_code: c.customer_postal_code,
+    project_address_line1: c.project_address_line1,
+    project_address_line2: c.project_address_line2 ?? "",
+    project_city: c.project_city,
+    project_province: c.project_province,
+    project_postal_code: c.project_postal_code,
+  };
+}
+
 export function BookingForm({
   equipment,
   addons,
+  initialCustomer = null,
+  isAuthenticated = false,
+  authEmail = null,
 }: {
   equipment: Equipment[];
   addons: Addon[];
+  initialCustomer?: InitialCustomer | null;
+  isAuthenticated?: boolean;
+  authEmail?: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
@@ -198,7 +249,9 @@ export function BookingForm({
   const [endDate, setEndDate] = useState<string>(todayISO());
   const [dropoffTime, setDropoffTime] = useState<DropoffTime>("9:00 AM");
   const [addonIds, setAddonIds] = useState<string[]>([]);
-  const [customer, setCustomer] = useState<CustomerState>(EMPTY_CUSTOMER);
+  const [customer, setCustomer] = useState<CustomerState>(
+    () => customerStateFromInitial(initialCustomer, authEmail),
+  );
   const [specialInstructions, setSpecialInstructions] = useState<string>("");
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -335,34 +388,10 @@ export function BookingForm({
     setCustomer((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function lookupReturningCustomer(email: string) {
-    if (!email || !email.includes("@")) return;
-    try {
-      const res = await fetch(`/api/customers/lookup?email=${encodeURIComponent(email)}`);
-      const json = await res.json();
-      if (json.found && json.customer) {
-        setCustomer((prev) => ({
-          ...prev,
-          first_name: json.customer.first_name ?? prev.first_name,
-          last_name: json.customer.last_name ?? prev.last_name,
-          business_name: json.customer.business_name ?? prev.business_name,
-          phone: json.customer.phone ?? prev.phone,
-          customer_address_line1: json.customer.customer_address_line1 ?? prev.customer_address_line1,
-          customer_address_line2: json.customer.customer_address_line2 ?? prev.customer_address_line2,
-          customer_city: json.customer.customer_city ?? prev.customer_city,
-          customer_province: json.customer.customer_province ?? prev.customer_province,
-          customer_postal_code: json.customer.customer_postal_code ?? prev.customer_postal_code,
-          project_address_line1: json.customer.project_address_line1 ?? prev.project_address_line1,
-          project_address_line2: json.customer.project_address_line2 ?? prev.project_address_line2,
-          project_city: json.customer.project_city ?? prev.project_city,
-          project_province: json.customer.project_province ?? prev.project_province,
-          project_postal_code: json.customer.project_postal_code ?? prev.project_postal_code,
-        }));
-      }
-    } catch {
-      // Silent — pre-fill is best-effort
-    }
-  }
+  // Returning-customer pre-fill is now handled SERVER-SIDE at /book load,
+  // gated by Supabase Auth — the customer must be signed in. The email-blur
+  // lookup that used to live here was a privacy leak (anyone who guessed an
+  // email could see that customer's data). Removed deliberately.
 
   async function uploadDL(file: File | null, side: "front" | "back") {
     if (!file) return;
@@ -547,7 +576,7 @@ export function BookingForm({
       {step === 2 && (
         <StepCustomer
           customer={customer} updateCustomer={updateCustomer}
-          onEmailBlur={lookupReturningCustomer}
+          emailLocked={isAuthenticated}
           onDLFrontChange={(f) => uploadDL(f, "front")}
           onDLBackChange={(f) => uploadDL(f, "back")}
           uploadingFront={uploadingFront} uploadingBack={uploadingBack}
@@ -820,7 +849,7 @@ function StepConfigure(props: {
 function StepCustomer(props: {
   customer: CustomerState;
   updateCustomer: <K extends keyof CustomerState>(key: K, value: CustomerState[K]) => void;
-  onEmailBlur: (email: string) => void;
+  emailLocked: boolean;
   onDLFrontChange: (file: File | null) => void;
   onDLBackChange: (file: File | null) => void;
   uploadingFront: boolean;
@@ -829,7 +858,7 @@ function StepCustomer(props: {
   onNext: () => void;
 }) {
   const {
-    customer, updateCustomer, onEmailBlur,
+    customer, updateCustomer, emailLocked,
     onDLFrontChange, onDLBackChange,
     uploadingFront, uploadingBack,
     onBack, onNext,
@@ -857,11 +886,12 @@ function StepCustomer(props: {
               placeholder="Smith Excavation Ltd."
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" />
           </Field>
-          <Field label="Email *">
+          <Field label={emailLocked ? "Email *  (account email, can't change here)" : "Email *"}>
             <input type="email" value={customer.email}
               onChange={(e) => updateCustomer("email", e.target.value)}
-              onBlur={(e) => onEmailBlur(e.target.value.trim().toLowerCase())}
-              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2" required />
+              readOnly={emailLocked}
+              className={`mt-1 w-full rounded-lg border border-ink/15 px-3 py-2 ${emailLocked ? "bg-ink/[0.04] text-muted cursor-not-allowed" : "bg-paper"}`}
+              required />
           </Field>
           <Field label="Phone *">
             <input type="tel" value={customer.phone}

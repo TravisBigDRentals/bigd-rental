@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { createBookingInput } from "@/lib/bookings/schema";
 import { calculatePricing } from "@/lib/pricing";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  // Read the current auth user via cookies. Used to link the new booking
+  // to a customer record. If unauthenticated, the booking creates a fresh
+  // customer row (no implicit dedup-by-email — that was a privacy hole).
+  const serverClient = await createSupabaseServerClient();
+  const { data: { user } } = await serverClient.auth.getUser();
   let body: unknown;
   try {
     body = await req.json();
@@ -67,45 +73,88 @@ export async function POST(req: Request) {
     })),
   });
 
-  // Upsert customer by email
-  const { data: customerRow, error: custErr } = await supabase
-    .from("customers")
-    .upsert(
-      {
-        first_name: customer.first_name,
-        last_name: customer.last_name,
-        business_name: customer.business_name ?? null,
-        email: customer.email,
-        phone: customer.phone,
-        drivers_license_front_url: customer.drivers_license_front_path,
-        drivers_license_back_url: customer.drivers_license_back_path,
-        customer_address_line1: customer.customer_address_line1,
-        customer_address_line2: customer.customer_address_line2 ?? null,
-        customer_city: customer.customer_city,
-        customer_province: customer.customer_province,
-        customer_postal_code: customer.customer_postal_code,
-        project_address_line1: customer.project_address_line1,
-        project_address_line2: customer.project_address_line2 ?? null,
-        project_city: customer.project_city,
-        project_province: customer.project_province,
-        project_postal_code: customer.project_postal_code,
-      },
-      { onConflict: "email" },
-    )
-    .select("id")
-    .single();
-  if (custErr || !customerRow) {
-    return NextResponse.json(
-      { error: custErr?.message ?? "Customer upsert failed" },
-      { status: 500 },
-    );
+  // Customer save strategy depends on authentication:
+  //   - Authenticated: upsert by auth_user_id. The customer's stored info
+  //     gets refreshed on every booking so admin sees the latest details.
+  //   - Anonymous: INSERT a fresh customer row. No dedup, no implicit
+  //     linking by email — that was the privacy hole we removed.
+  const baseCustomerFields = {
+    first_name: customer.first_name,
+    last_name: customer.last_name,
+    business_name: customer.business_name ?? null,
+    email: customer.email,
+    phone: customer.phone,
+    drivers_license_front_url: customer.drivers_license_front_path,
+    drivers_license_back_url: customer.drivers_license_back_path,
+    customer_address_line1: customer.customer_address_line1,
+    customer_address_line2: customer.customer_address_line2 ?? null,
+    customer_city: customer.customer_city,
+    customer_province: customer.customer_province,
+    customer_postal_code: customer.customer_postal_code,
+    project_address_line1: customer.project_address_line1,
+    project_address_line2: customer.project_address_line2 ?? null,
+    project_city: customer.project_city,
+    project_province: customer.project_province,
+    project_postal_code: customer.project_postal_code,
+  } as const;
+
+  let customerRowId: string;
+  if (user) {
+    // Authenticated: explicit SELECT → UPDATE-or-INSERT instead of upsert.
+    // The partial unique index on auth_user_id (WHERE NOT NULL) supports
+    // ON CONFLICT but requires a more specific conflict spec that PostgREST
+    // doesn't surface cleanly. Two queries is simpler and not in any
+    // realistic hot path.
+    const { data: existing, error: lookupErr } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+    if (lookupErr) {
+      return NextResponse.json({ error: lookupErr.message }, { status: 500 });
+    }
+    if (existing) {
+      const { error: updErr } = await supabase
+        .from("customers")
+        .update(baseCustomerFields)
+        .eq("id", existing.id);
+      if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+      customerRowId = existing.id;
+    } else {
+      const { data: row, error: insErr } = await supabase
+        .from("customers")
+        .insert({ ...baseCustomerFields, auth_user_id: user.id })
+        .select("id")
+        .single();
+      if (insErr || !row) {
+        return NextResponse.json(
+          { error: insErr?.message ?? "Customer insert failed" },
+          { status: 500 },
+        );
+      }
+      customerRowId = row.id;
+    }
+  } else {
+    // Anonymous: fresh customer row every time. No dedup, no email match.
+    const { data: row, error: insErr } = await supabase
+      .from("customers")
+      .insert({ ...baseCustomerFields, auth_user_id: null })
+      .select("id")
+      .single();
+    if (insErr || !row) {
+      return NextResponse.json(
+        { error: insErr?.message ?? "Customer insert failed" },
+        { status: 500 },
+      );
+    }
+    customerRowId = row.id;
   }
 
   // Insert booking
   const { data: bookingRow, error: bookErr } = await supabase
     .from("bookings")
     .insert({
-      customer_id: customerRow.id,
+      customer_id: customerRowId,
       equipment_id: booking.equipment_id,
       start_date: booking.start_date,
       end_date: booking.end_date,
