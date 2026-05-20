@@ -749,6 +749,37 @@ function StepConfigure(props: {
         </div>
       </div>
 
+      {equipmentId && compatibleAddons.length > 0 && (
+        <div>
+          <h2 className="font-display text-2xl font-semibold">Attachments</h2>
+          <p className="mt-1 text-sm text-muted">
+            First attachment is free. Each additional attachment is{" "}
+            {formatCents(compatibleAddons[0]?.daily_rate_cents ?? 4000)}/day.
+          </p>
+          <div className="mt-4 space-y-2">
+            {compatibleAddons.map((addon) => {
+              const checked = addonIds.includes(addon.id);
+              return (
+                <label key={addon.id}
+                  className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+                    checked ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30"
+                  }`}>
+                  <span className="flex items-center gap-3">
+                    <input type="checkbox" checked={checked}
+                      onChange={() => toggleAddon(addon.id)}
+                      className="h-4 w-4 accent-[var(--color-accent)]" />
+                    <span>{addon.name}</span>
+                  </span>
+                  <span className="font-mono text-sm text-muted">
+                    {formatCents(addon.daily_rate_cents)}/day
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div>
         <h2 className="font-display text-2xl font-semibold">Rental dates</h2>
         {equipmentId ? (
@@ -843,37 +874,6 @@ function StepConfigure(props: {
           </div>
         )}
       </div>
-
-      {equipmentId && compatibleAddons.length > 0 && (
-        <div>
-          <h2 className="font-display text-2xl font-semibold">Attachments</h2>
-          <p className="mt-1 text-sm text-muted">
-            First attachment is free. Each additional attachment is{" "}
-            {formatCents(compatibleAddons[0]?.daily_rate_cents ?? 4000)}/day.
-          </p>
-          <div className="mt-4 space-y-2">
-            {compatibleAddons.map((addon) => {
-              const checked = addonIds.includes(addon.id);
-              return (
-                <label key={addon.id}
-                  className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
-                    checked ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30"
-                  }`}>
-                  <span className="flex items-center gap-3">
-                    <input type="checkbox" checked={checked}
-                      onChange={() => toggleAddon(addon.id)}
-                      className="h-4 w-4 accent-[var(--color-accent)]" />
-                    <span>{addon.name}</span>
-                  </span>
-                  <span className="font-mono text-sm text-muted">
-                    {formatCents(addon.daily_rate_cents)}/day
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {pricing && (
         <div className="rounded-2xl border border-ink/10 bg-ink/[0.02] p-5">
