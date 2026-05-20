@@ -6,11 +6,17 @@ import { formatCents } from "@/lib/pricing";
 type Customer = {
   first_name: string;
   last_name: string;
+  business_name: string | null;
   email: string;
+  phone: string;
   project_address_line1: string | null;
   project_city: string | null;
   project_province: string | null;
   project_postal_code: string | null;
+  customer_address_line1: string | null;
+  customer_city: string | null;
+  customer_province: string | null;
+  customer_postal_code: string | null;
 };
 
 type Equipment = { name: string; serial: string };
@@ -51,7 +57,7 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
       id, start_date, end_date, dropoff_time, total_cents, status,
       signed_agreement_pdf_url, email_sent_at,
       equipment:equipment_id ( name, serial ),
-      customer:customer_id ( first_name, last_name, email, project_address_line1, project_city, project_province, project_postal_code ),
+      customer:customer_id ( first_name, last_name, business_name, email, phone, project_address_line1, project_city, project_province, project_postal_code, customer_address_line1, customer_city, customer_province, customer_postal_code ),
       booking_addons ( addon:addon_id ( name, daily_rate_cents ) )
     `)
     .eq("id", bookingId)
@@ -119,7 +125,11 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
        </div>`
     : "";
 
-  const result = await resend.emails.send({
+  const attachments = [
+    { filename: `rental-agreement-${booking.id}.pdf`, content: pdfBuffer },
+  ];
+
+  const customerResult = await resend.emails.send({
     from: `Big D's Rental <${from}>`,
     to: recipient,
     cc,
@@ -136,18 +146,122 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
       bookingId: booking.id,
       addons,
     }),
-    attachments: [
-      { filename: `rental-agreement-${booking.id}.pdf`, content: pdfBuffer },
-    ],
+    attachments,
   });
 
-  if (result.error) {
+  if (customerResult.error) {
     // Roll back the claim so a future retry can succeed.
     await supabase.from("bookings").update({ email_sent_at: null }).eq("id", bookingId);
-    return { sent: false, reason: `resend send failed: ${result.error.message}` };
+    return { sent: false, reason: `resend send failed: ${customerResult.error.message}` };
   }
 
-  return { sent: true, messageId: result.data?.id };
+  // Admin notification — separate operations-focused email with the PDF.
+  // Goes to BIGDS_ADMIN_EMAIL (in sandbox that's the same inbox the customer
+  // email got redirected to; in production it's Big D's real ops address).
+  // Don't roll back the customer claim if this one fails — customer email
+  // already succeeded.
+  if (adminCc) {
+    const customerAddressLine = [customer.customer_address_line1, customer.customer_city, customer.customer_province, customer.customer_postal_code]
+      .filter(Boolean)
+      .join(", ");
+    const adminResult = await resend.emails.send({
+      from: `Big D's Rental Bookings <${from}>`,
+      to: adminCc,
+      subject: `${subjectPrefix}New booking · ${equipment.name} · ${customer.first_name} ${customer.last_name} · ${booking.start_date}`,
+      html: sandboxNotice + adminHtmlBody({
+        customerFirstName: customer.first_name,
+        customerLastName: customer.last_name,
+        customerBusinessName: customer.business_name,
+        customerEmail: customer.email,
+        customerPhone: customer.phone,
+        customerAddressLine: customerAddressLine,
+        equipmentName: equipment.name,
+        equipmentSerial: equipment.serial,
+        startDate: booking.start_date,
+        endDate: booking.end_date,
+        dropoffTime: booking.dropoff_time,
+        projectAddressLine: addressLine,
+        totalCents: booking.total_cents,
+        bookingId: booking.id,
+        addons,
+      }),
+      attachments,
+    });
+    if (adminResult.error) {
+      console.error(`[email] admin notification failed: ${adminResult.error.message}`);
+    }
+  }
+
+  return { sent: true, messageId: customerResult.data?.id };
+}
+
+function adminHtmlBody(v: {
+  customerFirstName: string;
+  customerLastName: string;
+  customerBusinessName: string | null;
+  customerEmail: string;
+  customerPhone: string;
+  customerAddressLine: string;
+  equipmentName: string;
+  equipmentSerial: string;
+  startDate: string;
+  endDate: string;
+  dropoffTime: string | null;
+  projectAddressLine: string;
+  totalCents: number;
+  bookingId: string;
+  addons: AddonRow[];
+}): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ?? "https://bigd-rental.vercel.app";
+  const adminUrl = `${appUrl}/admin/bookings/${v.bookingId}`;
+  const customerFullName = [v.customerFirstName, v.customerLastName].filter(Boolean).join(" ");
+  const businessSuffix = v.customerBusinessName ? ` <span style="color:#7A766F;">· ${escapeHtml(v.customerBusinessName)}</span>` : "";
+  const addonsCell = v.addons.length === 0
+    ? "<span style=\"color:#7A766F;\">None</span>"
+    : v.addons
+        .map((a, i) => i === 0
+          ? `${escapeHtml(a.name)} <span style="color:#7A766F;">(free)</span>`
+          : `${escapeHtml(a.name)} <span style="color:#7A766F;">(${formatCents(a.daily_rate_cents)}/day)</span>`)
+        .join("<br>");
+  return `
+    <div style="font-family: -apple-system, system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 24px; color: #0F1114;">
+      <p style="font-family: monospace; font-size: 11px; letter-spacing: 0.15em; color: #7A766F; text-transform: uppercase; margin: 0;">New booking</p>
+      <h1 style="font-size: 24px; margin: 4px 0 24px;">${escapeHtml(customerFullName)}${businessSuffix}</h1>
+
+      <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: #7A766F; margin: 24px 0 8px;">Contact</h2>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="padding: 6px 0; color: #7A766F; width: 35%;">Email</td><td style="padding: 6px 0;">${escapeHtml(v.customerEmail)}</td></tr>
+        <tr><td style="padding: 6px 0; color: #7A766F;">Phone</td><td style="padding: 6px 0;"><a href="tel:${escapeHtml(v.customerPhone)}" style="color: #D4891A;">${escapeHtml(v.customerPhone)}</a></td></tr>
+        <tr><td style="padding: 6px 0; color: #7A766F; vertical-align: top;">Billing address</td><td style="padding: 6px 0;">${escapeHtml(v.customerAddressLine) || "—"}</td></tr>
+      </table>
+
+      <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: #7A766F; margin: 24px 0 8px;">Equipment</h2>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="padding: 6px 0; color: #7A766F; width: 35%;">Machine</td><td style="padding: 6px 0;">${escapeHtml(v.equipmentName)}</td></tr>
+        <tr><td style="padding: 6px 0; color: #7A766F;">Serial</td><td style="padding: 6px 0; font-family: monospace; font-size: 13px;">${escapeHtml(v.equipmentSerial)}</td></tr>
+        <tr><td style="padding: 6px 0; color: #7A766F; vertical-align: top;">Add-ons</td><td style="padding: 6px 0;">${addonsCell}</td></tr>
+      </table>
+
+      <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: #7A766F; margin: 24px 0 8px;">Delivery & pickup</h2>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="padding: 6px 0; color: #7A766F; width: 35%;">Deliver</td><td style="padding: 6px 0;"><strong>${v.startDate}</strong>${v.dropoffTime ? ` at ${v.dropoffTime}` : ""}</td></tr>
+        <tr><td style="padding: 6px 0; color: #7A766F;">Pick up</td><td style="padding: 6px 0;"><strong>${v.endDate}</strong>${v.dropoffTime ? ` at ${v.dropoffTime}` : ""}</td></tr>
+        <tr><td style="padding: 6px 0; color: #7A766F; vertical-align: top;">Project site</td><td style="padding: 6px 0;"><strong>${escapeHtml(v.projectAddressLine) || "—"}</strong></td></tr>
+      </table>
+
+      <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: #7A766F; margin: 24px 0 8px;">Payment</h2>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="padding: 6px 0; color: #7A766F; width: 35%;">Total</td><td style="padding: 6px 0; font-weight: 600;">${formatCents(v.totalCents)} CAD</td></tr>
+      </table>
+
+      <p style="margin-top: 32px;">
+        <a href="${adminUrl}" style="display: inline-block; background: #0F1114; color: #F5F2EC; padding: 10px 20px; border-radius: 999px; text-decoration: none; font-weight: 500;">Open in admin →</a>
+      </p>
+
+      <p style="margin-top: 24px; font-family: monospace; font-size: 12px; color: #7A766F;">Booking ID: ${v.bookingId}</p>
+      <p style="font-family: monospace; font-size: 12px; color: #7A766F;">Signed rental agreement attached.</p>
+    </div>
+  `;
 }
 
 function escapeHtml(s: string): string {
