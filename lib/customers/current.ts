@@ -30,13 +30,20 @@ export type CurrentCustomer = {
 // Returns the authenticated user + their linked customer row (if any).
 // Returns null when no one is signed in.
 //
-// Customer match is by `auth_user_id` — NEVER by email. The whole point
-// of the auth refactor is that signing up doesn't let you claim
-// anonymous-booking customer rows that happen to share your email.
+// Before fetching, we opportunistically claim any anonymous bookings
+// submitted under the same email. Policy: signing in is treated as
+// proof you own the email, so orphan bookings under that email roll
+// into your account. In production this depends on Supabase Auth
+// having email confirmation enabled — otherwise a bad actor could
+// sign up with someone else's email and claim their bookings.
 export async function getCurrentCustomer(): Promise<CurrentCustomer | null> {
   const serverClient = await createSupabaseServerClient();
   const { data: { user } } = await serverClient.auth.getUser();
   if (!user) return null;
+
+  if (user.email) {
+    await claimOrphanBookingsForUser(user.id, user.email);
+  }
 
   const service = createSupabaseServiceClient();
   const { data } = await service
@@ -52,4 +59,58 @@ export async function getCurrentCustomer(): Promise<CurrentCustomer | null> {
     authEmail: user.email ?? null,
     customer: (data as CurrentCustomer["customer"]) ?? null,
   };
+}
+
+// Finds anonymous customer rows under the user's email and merges them
+// into the user's account so the bookings appear in their portal.
+// Idempotent — safe to call on every page load.
+async function claimOrphanBookingsForUser(authUserId: string, email: string) {
+  const service = createSupabaseServiceClient();
+  const normalized = email.toLowerCase().trim();
+
+  const { data: orphans } = await service
+    .from("customers")
+    .select("id, created_at")
+    .is("auth_user_id", null)
+    .eq("email", normalized)
+    .order("created_at", { ascending: false });
+
+  if (!orphans || orphans.length === 0) return;
+
+  const { data: ownRow } = await service
+    .from("customers")
+    .select("id")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+
+  // Pick a target row to absorb the orphans' bookings. If the user
+  // already has their own customer row, repoint into it; otherwise
+  // promote the most recent orphan by stamping it with auth_user_id.
+  let targetCustomerId: string;
+  let orphansToDelete: string[];
+  if (ownRow) {
+    targetCustomerId = ownRow.id;
+    orphansToDelete = orphans.map((o) => o.id);
+  } else {
+    const [primary, ...rest] = orphans;
+    const { error: promoteErr } = await service
+      .from("customers")
+      .update({ auth_user_id: authUserId })
+      .eq("id", primary.id);
+    if (promoteErr) return;
+    targetCustomerId = primary.id;
+    orphansToDelete = rest.map((o) => o.id);
+  }
+
+  if (orphansToDelete.length === 0) return;
+
+  // bookings.customer_id has ON DELETE RESTRICT, so we repoint before
+  // deleting. Both queries are idempotent.
+  const { error: repointErr } = await service
+    .from("bookings")
+    .update({ customer_id: targetCustomerId })
+    .in("customer_id", orphansToDelete);
+  if (repointErr) return;
+
+  await service.from("customers").delete().in("id", orphansToDelete);
 }
