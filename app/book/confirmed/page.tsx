@@ -11,9 +11,9 @@ export const metadata = {
 export default async function ConfirmedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string }>;
+  searchParams: Promise<{ id?: string; acct?: string }>;
 }) {
-  const { id } = await searchParams;
+  const { id, acct } = await searchParams;
   if (!id) notFound();
 
   const supabase = createSupabaseServiceClient();
@@ -47,6 +47,23 @@ export default async function ConfirmedPage({
           Payment received and your machine is locked in for the dates below. We&rsquo;ll
           follow up with the signed rental agreement shortly. A confirmation email is on its way.
         </p>
+
+        {acct === "created" && (
+          <div className="mt-6 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
+            <p className="font-medium">Account created — you&rsquo;re signed in.</p>
+            <p className="mt-1 text-muted">
+              This booking now lives in your account portal alongside any future
+              rentals. <Link href="/account/history" className="underline">View your rentals</Link>.
+            </p>
+          </div>
+        )}
+        {acct === "exists" && (
+          <div className="mt-6 rounded-lg border border-ink/15 bg-paper px-4 py-3 text-sm text-muted">
+            An account already exists for this email. We didn&rsquo;t create a new
+            one. <Link href="/sign-in" className="underline">Sign in</Link> to
+            see all your rentals together on the next booking.
+          </div>
+        )}
 
         <div className="mt-10 rounded-2xl border border-ink/10 bg-ink/[0.02] p-6 space-y-3">
           <div className="flex justify-between">

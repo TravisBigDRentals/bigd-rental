@@ -73,11 +73,49 @@ export async function POST(req: Request) {
     })),
   });
 
+  // If anonymous + opted to save info, try to provision an auth user
+  // before deciding how to write the customer row. We treat the booking
+  // itself as email-verification (they're about to pay on that email),
+  // so we auto-confirm and sign them in. Collisions just fall back to an
+  // anonymous booking — no error, no implicit link.
+  let provisionedUserId: string | null = null;
+  let accountCreated = false;
+  let accountEmailCollision = false;
+  if (!user && customer.password) {
+    const { data: created, error: createErr } = await supabase.auth.admin.createUser({
+      email: customer.email,
+      password: customer.password,
+      email_confirm: true,
+    });
+    if (createErr) {
+      const msg = createErr.message?.toLowerCase() ?? "";
+      if (msg.includes("already") || msg.includes("registered") || msg.includes("exists")) {
+        accountEmailCollision = true;
+      } else {
+        return NextResponse.json({ error: createErr.message }, { status: 500 });
+      }
+    } else if (created.user) {
+      provisionedUserId = created.user.id;
+      accountCreated = true;
+      // Sign them in on this request so the redirect to /book/confirmed
+      // (and onward to /account) lands them in an authenticated session.
+      const { error: signInErr } = await serverClient.auth.signInWithPassword({
+        email: customer.email,
+        password: customer.password,
+      });
+      if (signInErr) {
+        // Non-fatal: account exists, they can sign in later. Keep going.
+        provisionedUserId = null;
+        accountCreated = false;
+      }
+    }
+  }
+
   // Customer save strategy depends on authentication:
-  //   - Authenticated: upsert by auth_user_id. The customer's stored info
-  //     gets refreshed on every booking so admin sees the latest details.
+  //   - Authenticated (or just-provisioned): upsert by auth_user_id.
   //   - Anonymous: INSERT a fresh customer row. No dedup, no implicit
   //     linking by email — that was the privacy hole we removed.
+  const linkedUserId = user?.id ?? provisionedUserId;
   const baseCustomerFields = {
     first_name: customer.first_name,
     last_name: customer.last_name,
@@ -99,16 +137,16 @@ export async function POST(req: Request) {
   } as const;
 
   let customerRowId: string;
-  if (user) {
-    // Authenticated: explicit SELECT → UPDATE-or-INSERT instead of upsert.
-    // The partial unique index on auth_user_id (WHERE NOT NULL) supports
-    // ON CONFLICT but requires a more specific conflict spec that PostgREST
-    // doesn't surface cleanly. Two queries is simpler and not in any
-    // realistic hot path.
+  if (linkedUserId) {
+    // Authenticated (existing or just-provisioned): explicit SELECT →
+    // UPDATE-or-INSERT instead of upsert. The partial unique index on
+    // auth_user_id (WHERE NOT NULL) supports ON CONFLICT but requires a
+    // more specific conflict spec that PostgREST doesn't surface cleanly.
+    // Two queries is simpler and not in any realistic hot path.
     const { data: existing, error: lookupErr } = await supabase
       .from("customers")
       .select("id")
-      .eq("auth_user_id", user.id)
+      .eq("auth_user_id", linkedUserId)
       .maybeSingle();
     if (lookupErr) {
       return NextResponse.json({ error: lookupErr.message }, { status: 500 });
@@ -123,7 +161,7 @@ export async function POST(req: Request) {
     } else {
       const { data: row, error: insErr } = await supabase
         .from("customers")
-        .insert({ ...baseCustomerFields, auth_user_id: user.id })
+        .insert({ ...baseCustomerFields, auth_user_id: linkedUserId })
         .select("id")
         .single();
       if (insErr || !row) {
@@ -199,5 +237,7 @@ export async function POST(req: Request) {
     booking_id: bookingRow.id,
     total_cents: pricing.totalCents,
     days: pricing.days,
+    account_created: accountCreated,
+    account_email_collision: accountEmailCollision,
   });
 }

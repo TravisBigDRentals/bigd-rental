@@ -27,6 +27,11 @@ export const customerInput = z.object({
   project_city: z.string().min(1),
   project_province: z.string().min(1),
   project_postal_code: z.string().min(1),
+  // Optional: when an anonymous booker opts to save their info for
+  // next time. The API provisions a Supabase Auth user and stamps
+  // auth_user_id on the new customer row. Ignored if the booker is
+  // already authenticated.
+  password: z.string().min(8).max(72).nullable().optional(),
 });
 export type CustomerInput = z.infer<typeof customerInput>;
 

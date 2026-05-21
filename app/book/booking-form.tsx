@@ -298,8 +298,19 @@ export function BookingForm({
       }));
     }
   }, [licenseChoice, hasPreviousLicense, initialCustomer]);
+  // Anonymous bookers can opt to save their info — we provision a Supabase
+  // Auth user at booking-submit time and link this booking's customer row
+  // to it. Hidden entirely for already-signed-in users.
+  const [createAccount, setCreateAccount] = useState(false);
+  const [accountPassword, setAccountPassword] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState<string>("");
   const [bookingId, setBookingId] = useState<string | null>(null);
+  // Result flags from /api/bookings/create — surfaced on the confirmation
+  // page via query string. `accountCreated` ⇒ we provisioned + signed in.
+  // `accountEmailCollision` ⇒ they ticked Save my info but an account
+  // already existed; we silently kept the booking anonymous.
+  const [accountCreated, setAccountCreated] = useState(false);
+  const [accountEmailCollision, setAccountEmailCollision] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [uploadingFront, setUploadingFront] = useState(false);
@@ -520,6 +531,9 @@ export function BookingForm({
     if (!customer.project_city.trim()) return setError("Project city is required");
     if (!customer.project_province.trim()) return setError("Project province is required");
     if (!customer.project_postal_code.trim()) return setError("Project postal code is required");
+    if (!isAuthenticated && createAccount && accountPassword.length < 8) {
+      return setError("Password must be at least 8 characters (or uncheck \"Save my info\")");
+    }
     setStep(3);
   }
 
@@ -553,6 +567,7 @@ export function BookingForm({
             project_city: customer.project_city.trim(),
             project_province: customer.project_province.trim(),
             project_postal_code: customer.project_postal_code.trim(),
+            password: !isAuthenticated && createAccount ? accountPassword : null,
           },
           booking: {
             equipment_id: equipmentId,
@@ -570,6 +585,8 @@ export function BookingForm({
         return;
       }
       setBookingId(json.booking_id);
+      setAccountCreated(!!json.account_created);
+      setAccountEmailCollision(!!json.account_email_collision);
       setStep(4);
     } finally {
       setCreatingBooking(false);
@@ -599,7 +616,10 @@ export function BookingForm({
         setError(json.error ?? "Payment failed");
         return;
       }
-      router.push(`/book/confirmed?id=${bookingId}`);
+      const params = new URLSearchParams({ id: bookingId });
+      if (accountCreated) params.set("acct", "created");
+      else if (accountEmailCollision) params.set("acct", "exists");
+      router.push(`/book/confirmed?${params.toString()}`);
     } finally {
       setPaying(false);
     }
@@ -651,6 +671,11 @@ export function BookingForm({
                 onDLFrontChange={(f) => uploadDL(f, "front")}
                 onDLBackChange={(f) => uploadDL(f, "back")}
                 uploadingFront={uploadingFront} uploadingBack={uploadingBack}
+                showSaveInfoOption={!isAuthenticated}
+                createAccount={createAccount}
+                setCreateAccount={setCreateAccount}
+                accountPassword={accountPassword}
+                setAccountPassword={setAccountPassword}
                 onBack={() => setStep(1)}
               />
             )}
@@ -988,6 +1013,11 @@ function StepCustomer(props: {
   onDLBackChange: (file: File | null) => void;
   uploadingFront: boolean;
   uploadingBack: boolean;
+  showSaveInfoOption: boolean;
+  createAccount: boolean;
+  setCreateAccount: (v: boolean) => void;
+  accountPassword: string;
+  setAccountPassword: (v: string) => void;
   onBack: () => void;
 }) {
   const {
@@ -995,6 +1025,8 @@ function StepCustomer(props: {
     hasPreviousLicense, licenseChoice, setLicenseChoice,
     onDLFrontChange, onDLBackChange,
     uploadingFront, uploadingBack,
+    showSaveInfoOption, createAccount, setCreateAccount,
+    accountPassword, setAccountPassword,
     onBack,
   } = props;
 
@@ -1160,6 +1192,44 @@ function StepCustomer(props: {
           </Field>
         </div>
       </div>
+
+      {showSaveInfoOption && (
+        <div>
+          <h2 className="font-display text-2xl font-semibold">Save your info?</h2>
+          <p className="mt-1 text-sm text-muted">
+            Optional. Create an account using the email above so this booking
+            shows in your account portal and your info pre-fills next time.
+          </p>
+          <label className={`mt-4 flex items-start gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+            createAccount ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30"
+          }`}>
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+              checked={createAccount}
+              onChange={(e) => setCreateAccount(e.target.checked)}
+            />
+            <span className="text-sm">
+              Save my info — create an account with <strong>{customer.email || "the email above"}</strong>.
+            </span>
+          </label>
+          {createAccount && (
+            <div className="mt-4 max-w-sm">
+              <Field label="Choose a password *">
+                <input
+                  type="password"
+                  value={accountPassword}
+                  onChange={(e) => setAccountPassword(e.target.value)}
+                  minLength={8}
+                  autoComplete="new-password"
+                  className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
+                />
+                <span className="mt-1 block text-xs text-muted">At least 8 characters.</span>
+              </Field>
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <button type="button" onClick={onBack}
