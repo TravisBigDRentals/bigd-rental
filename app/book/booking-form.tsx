@@ -9,7 +9,7 @@ import type { Addon, Equipment } from "@/lib/bookings/queries";
 import { calculatePricing, formatCents } from "@/lib/pricing";
 import { DLDropZone } from "@/components/dl-drop-zone";
 import { publicEquipmentImageUrl } from "@/lib/equipment-images";
-import { PricingWidget } from "./_components/pricing-widget";
+import { PricingWidget, PricingMobileBar } from "./_components/pricing-widget";
 
 function dateToISO(d: Date): string {
   // Local-date ISO (YYYY-MM-DD) — avoids UTC drift from toISOString().
@@ -616,7 +616,8 @@ export function BookingForm({
       )}
 
       {(step === 1 || step === 2 || step === 3) ? (
-        <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8 pb-24 lg:pb-0">
+        <>
+        <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8 lg:items-start pb-24 lg:pb-0">
           {/* Form content (left column on desktop, full width + bottom-padding on mobile) */}
           <div className="min-w-0">
             {step === 1 && (
@@ -667,7 +668,7 @@ export function BookingForm({
               />
             )}
           </div>
-          {/* Sticky pricing widget (right column desktop / bottom bar mobile) */}
+          {/* Desktop sticky sidebar */}
           <PricingWidget
             equipment={selectedEquipment}
             startDate={startDate}
@@ -694,6 +695,34 @@ export function BookingForm({
             }
           />
         </div>
+        {/* Mobile fixed bottom bar — outside the grid so it can't
+            interfere with the desktop sidebar's grid-cell layout */}
+        <PricingMobileBar
+          equipment={selectedEquipment}
+          startDate={startDate}
+          endDate={endDate}
+          selectedAddons={selectedAddons}
+          nextLabel={
+            step === 1 ? "Next →" :
+            step === 2 ? "Review →" :
+            "Sign →"
+          }
+          nextDisabled={
+            step === 1 ? (!equipmentId || !!currentConflict) :
+            false
+          }
+          loading={
+            step === 1 ? checkingAvailability :
+            step === 3 ? creatingBooking :
+            false
+          }
+          onNext={
+            step === 1 ? goToStep2 :
+            step === 2 ? goToStep3 :
+            createBookingAndAdvanceToSign
+          }
+        />
+        </>
       ) : null}
 
       {step === 4 && bookingId && (
