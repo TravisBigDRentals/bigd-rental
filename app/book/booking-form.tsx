@@ -9,6 +9,7 @@ import type { Addon, Equipment } from "@/lib/bookings/queries";
 import { calculatePricing, formatCents } from "@/lib/pricing";
 import { DLDropZone } from "@/components/dl-drop-zone";
 import { publicEquipmentImageUrl } from "@/lib/equipment-images";
+import { PricingWidget } from "./_components/pricing-widget";
 
 function dateToISO(d: Date): string {
   // Local-date ISO (YYYY-MM-DD) — avoids UTC drift from toISOString().
@@ -614,56 +615,86 @@ export function BookingForm({
         </div>
       )}
 
-      {step === 1 && (
-        <StepConfigure
-          equipment={equipment}
-          equipmentId={equipmentId}
-          setEquipmentId={(id) => { setEquipmentId(id); setAddonIds([]); }}
-          startDate={startDate}
-          endDate={endDate}
-          pickupDate={pickupDateISO}
-          dropoffTime={dropoffTime} setDropoffTime={setDropoffTime}
-          compatibleAddons={compatibleAddons}
-          addonIds={addonIds} toggleAddon={toggleAddon}
-          pricing={pricing}
-          previewImageUrl={previewImageUrl}
-          blockedRanges={blockedRanges}
-          loadingAvailability={loadingAvailability}
-          currentConflict={currentConflict}
-          activeField={activeField}
-          setActiveField={setActiveField}
-          onCalendarDayClick={handleCalendarDayClick}
-          onNext={goToStep2} loading={checkingAvailability}
-        />
-      )}
-
-      {step === 2 && (
-        <StepCustomer
-          customer={customer} updateCustomer={updateCustomer}
-          emailLocked={isAuthenticated}
-          hasPreviousLicense={hasPreviousLicense}
-          licenseChoice={licenseChoice}
-          setLicenseChoice={setLicenseChoice}
-          onDLFrontChange={(f) => uploadDL(f, "front")}
-          onDLBackChange={(f) => uploadDL(f, "back")}
-          uploadingFront={uploadingFront} uploadingBack={uploadingBack}
-          onBack={() => setStep(1)} onNext={goToStep3}
-        />
-      )}
-
-      {step === 3 && pricing && selectedEquipment && (
-        <StepReview
-          equipment={selectedEquipment}
-          startDate={startDate} endDate={endDate} pickupDate={pickupDateISO}
-          dropoffTime={dropoffTime} addons={selectedAddons}
-          customer={customer}
-          specialInstructions={specialInstructions}
-          setSpecialInstructions={setSpecialInstructions}
-          pricing={pricing}
-          onBack={() => setStep(2)} onNext={createBookingAndAdvanceToSign}
-          submitting={creatingBooking}
-        />
-      )}
+      {(step === 1 || step === 2 || step === 3) ? (
+        <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8 pb-24 lg:pb-0">
+          {/* Form content (left column on desktop, full width + bottom-padding on mobile) */}
+          <div className="min-w-0">
+            {step === 1 && (
+              <StepConfigure
+                equipment={equipment}
+                equipmentId={equipmentId}
+                setEquipmentId={(id) => { setEquipmentId(id); setAddonIds([]); }}
+                startDate={startDate}
+                endDate={endDate}
+                pickupDate={pickupDateISO}
+                dropoffTime={dropoffTime} setDropoffTime={setDropoffTime}
+                compatibleAddons={compatibleAddons}
+                addonIds={addonIds} toggleAddon={toggleAddon}
+                pricing={pricing}
+                previewImageUrl={previewImageUrl}
+                blockedRanges={blockedRanges}
+                loadingAvailability={loadingAvailability}
+                currentConflict={currentConflict}
+                activeField={activeField}
+                setActiveField={setActiveField}
+                onCalendarDayClick={handleCalendarDayClick}
+              />
+            )}
+            {step === 2 && (
+              <StepCustomer
+                customer={customer} updateCustomer={updateCustomer}
+                emailLocked={isAuthenticated}
+                hasPreviousLicense={hasPreviousLicense}
+                licenseChoice={licenseChoice}
+                setLicenseChoice={setLicenseChoice}
+                onDLFrontChange={(f) => uploadDL(f, "front")}
+                onDLBackChange={(f) => uploadDL(f, "back")}
+                uploadingFront={uploadingFront} uploadingBack={uploadingBack}
+                onBack={() => setStep(1)}
+              />
+            )}
+            {step === 3 && pricing && selectedEquipment && (
+              <StepReview
+                equipment={selectedEquipment}
+                startDate={startDate} endDate={endDate} pickupDate={pickupDateISO}
+                dropoffTime={dropoffTime} addons={selectedAddons}
+                customer={customer}
+                specialInstructions={specialInstructions}
+                setSpecialInstructions={setSpecialInstructions}
+                pricing={pricing}
+                onBack={() => setStep(2)}
+                submitting={creatingBooking}
+              />
+            )}
+          </div>
+          {/* Sticky pricing widget (right column desktop / bottom bar mobile) */}
+          <PricingWidget
+            equipment={selectedEquipment}
+            startDate={startDate}
+            endDate={endDate}
+            selectedAddons={selectedAddons}
+            nextLabel={
+              step === 1 ? "Next: your info →" :
+              step === 2 ? "Next: review →" :
+              "Continue to sign →"
+            }
+            nextDisabled={
+              step === 1 ? (!equipmentId || !!currentConflict) :
+              false
+            }
+            loading={
+              step === 1 ? checkingAvailability :
+              step === 3 ? creatingBooking :
+              false
+            }
+            onNext={
+              step === 1 ? goToStep2 :
+              step === 2 ? goToStep3 :
+              createBookingAndAdvanceToSign
+            }
+          />
+        </div>
+      ) : null}
 
       {step === 4 && bookingId && (
         <StepSign
@@ -730,17 +761,15 @@ function StepConfigure(props: {
   activeField: "delivery" | "pickup";
   setActiveField: (f: "delivery" | "pickup") => void;
   onCalendarDayClick: (day: Date) => void;
-  onNext: () => void; loading: boolean;
 }) {
   const {
     equipment, equipmentId, setEquipmentId,
     startDate, endDate, pickupDate,
     dropoffTime, setDropoffTime,
     compatibleAddons, addonIds, toggleAddon,
-    pricing, previewImageUrl,
+    previewImageUrl,
     blockedRanges, loadingAvailability, currentConflict,
     activeField, setActiveField, onCalendarDayClick,
-    onNext, loading,
   } = props;
 
   return (
@@ -913,21 +942,6 @@ function StepConfigure(props: {
         )}
       </div>
 
-      {pricing && (
-        <div className="rounded-2xl border border-ink/10 bg-ink/[0.02] p-5">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted">
-            Estimated total · {pricing.days} day{pricing.days === 1 ? "" : "s"}
-          </p>
-          <p className="mt-1 font-display text-3xl font-bold">{formatCents(pricing.totalCents)}</p>
-        </div>
-      )}
-
-      <div className="flex justify-end">
-        <button type="button" onClick={onNext} disabled={loading || !equipmentId || !!currentConflict}
-          className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
-          {loading ? "Checking availability…" : "Next: your info →"}
-        </button>
-      </div>
     </section>
   );
 }
@@ -946,14 +960,13 @@ function StepCustomer(props: {
   uploadingFront: boolean;
   uploadingBack: boolean;
   onBack: () => void;
-  onNext: () => void;
 }) {
   const {
     customer, updateCustomer, emailLocked,
     hasPreviousLicense, licenseChoice, setLicenseChoice,
     onDLFrontChange, onDLBackChange,
     uploadingFront, uploadingBack,
-    onBack, onNext,
+    onBack,
   } = props;
 
   return (
@@ -1119,14 +1132,10 @@ function StepCustomer(props: {
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div>
         <button type="button" onClick={onBack}
           className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 transition-colors">
           ← Back
-        </button>
-        <button type="button" onClick={onNext}
-          className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover transition-colors">
-          Next: review →
         </button>
       </div>
     </section>
@@ -1156,13 +1165,12 @@ function StepReview(props: {
   setSpecialInstructions: (s: string) => void;
   pricing: ReturnType<typeof calculatePricing>;
   onBack: () => void;
-  onNext: () => void;
   submitting: boolean;
 }) {
   const {
     equipment, startDate, endDate, pickupDate, dropoffTime, addons, customer,
     specialInstructions, setSpecialInstructions, pricing,
-    onBack, onNext, submitting,
+    onBack, submitting,
   } = props;
 
   const customerFullAddress = [
@@ -1265,14 +1273,10 @@ function StepReview(props: {
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <button type="button" onClick={onBack}
-          className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 transition-colors">
+      <div>
+        <button type="button" onClick={onBack} disabled={submitting}
+          className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 disabled:opacity-50 transition-colors">
           ← Back
-        </button>
-        <button type="button" onClick={onNext} disabled={submitting}
-          className="rounded-full bg-accent px-8 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors">
-          {submitting ? "Saving booking…" : "Continue to sign →"}
         </button>
       </div>
     </section>

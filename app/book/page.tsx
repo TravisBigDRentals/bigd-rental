@@ -18,7 +18,7 @@ export default async function BookPage() {
   <>
     <SiteNav />
     <main className="flex-1 px-6 py-12 sm:py-16">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <header className="mb-10">
           <p className="font-mono text-xs tracking-widest text-muted uppercase">
             Calgary, AB · Construction Equipment Rental
