@@ -8,6 +8,7 @@ import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import type { Addon, Equipment } from "@/lib/bookings/queries";
 import { calculatePricing, formatCents } from "@/lib/pricing";
 import { DLDropZone } from "@/components/dl-drop-zone";
+import { publicEquipmentImageUrl } from "@/lib/equipment-images";
 
 function dateToISO(d: Date): string {
   // Local-date ISO (YYYY-MM-DD) — avoids UTC drift from toISOString().
@@ -407,6 +408,21 @@ export function BookingForm({
     [addons, addonIds],
   );
 
+  // Resolve which image to show. Order of precedence:
+  //   1. Most recently selected addon's combo image (last in addonIds[])
+  //   2. Selected equipment's base image
+  //   3. null (renders placeholder)
+  const previewImageUrl = useMemo(() => {
+    if (!selectedEquipment) return null;
+    const lastAddonId = addonIds[addonIds.length - 1];
+    if (lastAddonId) {
+      const lastAddon = addons.find((a) => a.id === lastAddonId);
+      const url = publicEquipmentImageUrl(lastAddon?.image_url);
+      if (url) return url;
+    }
+    return publicEquipmentImageUrl(selectedEquipment.image_url);
+  }, [selectedEquipment, addonIds, addons]);
+
   const pricing = useMemo(() => {
     if (!selectedEquipment) return null;
     return calculatePricing({
@@ -610,6 +626,7 @@ export function BookingForm({
           compatibleAddons={compatibleAddons}
           addonIds={addonIds} toggleAddon={toggleAddon}
           pricing={pricing}
+          previewImageUrl={previewImageUrl}
           blockedRanges={blockedRanges}
           loadingAvailability={loadingAvailability}
           currentConflict={currentConflict}
@@ -706,6 +723,7 @@ function StepConfigure(props: {
   compatibleAddons: Addon[];
   addonIds: string[]; toggleAddon: (id: string) => void;
   pricing: ReturnType<typeof calculatePricing> | null;
+  previewImageUrl: string | null;
   blockedRanges: { start_date: string; end_date: string }[];
   loadingAvailability: boolean;
   currentConflict: { start_date: string; end_date: string } | null;
@@ -719,7 +737,7 @@ function StepConfigure(props: {
     startDate, endDate, pickupDate,
     dropoffTime, setDropoffTime,
     compatibleAddons, addonIds, toggleAddon,
-    pricing,
+    pricing, previewImageUrl,
     blockedRanges, loadingAvailability, currentConflict,
     activeField, setActiveField, onCalendarDayClick,
     onNext, loading,
@@ -729,23 +747,43 @@ function StepConfigure(props: {
     <section className="space-y-8">
       <div>
         <h2 className="font-display text-2xl font-semibold">Pick a machine</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {equipment.map((eq) => {
-            const selected = equipmentId === eq.id;
-            return (
-              <button key={eq.id} type="button" onClick={() => setEquipmentId(eq.id)}
-                className={`text-left rounded-2xl border p-5 transition-colors ${
-                  selected ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30 bg-paper"
-                }`}>
-                <p className="font-display text-lg font-semibold">{eq.name}</p>
-                <p className="mt-1 font-mono text-xs text-muted">{eq.serial}</p>
-                <p className="mt-3 text-sm">
-                  <span className="font-mono">{formatCents(eq.daily_rate_cents)}</span>
-                  <span className="text-muted"> / day</span>
+        <div className="mt-4 flex flex-col lg:flex-row gap-4 lg:gap-6 lg:items-start">
+          {/* Machine cards: single-column stack on the left */}
+          <div className="lg:flex-1 lg:min-w-0 space-y-3">
+            {equipment.map((eq) => {
+              const selected = equipmentId === eq.id;
+              return (
+                <button key={eq.id} type="button" onClick={() => setEquipmentId(eq.id)}
+                  className={`w-full text-left rounded-2xl border p-5 transition-colors ${
+                    selected ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30 bg-paper"
+                  }`}>
+                  <p className="font-display text-lg font-semibold">{eq.name}</p>
+                  <p className="mt-1 font-mono text-xs text-muted">{eq.serial}</p>
+                  <p className="mt-3 text-sm">
+                    <span className="font-mono">{formatCents(eq.daily_rate_cents)}</span>
+                    <span className="text-muted"> / day</span>
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          {/* Image preview panel */}
+          <div className="lg:flex-1 lg:min-w-0">
+            <div className="aspect-[4/3] rounded-2xl bg-ink/[0.04] border border-ink/10 overflow-hidden flex items-center justify-center">
+              {previewImageUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={previewImageUrl}
+                  alt="Selected equipment"
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <p className="text-sm text-muted px-6 text-center">
+                  Select a machine to see what you&rsquo;re renting.
                 </p>
-              </button>
-            );
-          })}
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
