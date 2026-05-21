@@ -769,7 +769,7 @@ function StepConfigure(props: {
           </div>
           {/* Image preview panel */}
           <div className="lg:flex-1 lg:min-w-0">
-            <div className="aspect-[4/3] rounded-2xl bg-ink/[0.04] border border-ink/10 overflow-hidden flex items-center justify-center">
+            <div className="aspect-[4/3] rounded-2xl bg-white border border-ink/10 overflow-hidden flex items-center justify-center">
               {previewImageUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
