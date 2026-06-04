@@ -1029,51 +1029,51 @@ function StepConfigure(props: {
             />
           )}
           <div className="flex flex-col gap-3 lg:min-w-[260px]">
-            <button
-              type="button"
+            <DateSlotCard
+              label="Delivery date"
+              filled={!!startDate}
+              active={activeField === "delivery"}
               onClick={() => setActiveField("delivery")}
-              aria-pressed={activeField === "delivery"}
-              className={`text-left rounded-lg px-4 py-3 transition-all bg-ink text-paper ${
-                activeField === "delivery" ? "ring-2 ring-accent" : "ring-0 hover:bg-ink/90"
-              }`}
-            >
-              <span className="block font-display tracking-[0.12em] text-[10px] text-accent uppercase">Delivery date</span>
-              <span className="mt-1 block font-mono text-base">
-                {startDate || <span className="text-paper/40">Pick a day →</span>}
-              </span>
-            </button>
-            <button
-              type="button"
+              value={startDate || "Pick a day →"}
+              isPlaceholder={!startDate}
+            />
+            <DateSlotCard
+              label="Pickup date"
+              filled={!!endDate}
+              active={activeField === "pickup"}
               onClick={() => setActiveField("pickup")}
-              aria-pressed={activeField === "pickup"}
-              className={`text-left rounded-lg px-4 py-3 transition-all bg-ink text-paper ${
-                activeField === "pickup" ? "ring-2 ring-accent" : "ring-0 hover:bg-ink/90"
-              }`}
-            >
-              <span className="block font-display tracking-[0.12em] text-[10px] text-accent uppercase">Pickup date</span>
-              <span className="mt-1 block font-mono text-base">
-                {endDate || <span className="text-paper/40">Pick a day →</span>}
-              </span>
-            </button>
-            <label className="block rounded-lg px-4 py-3 bg-ink text-paper cursor-pointer hover:bg-ink/90 transition-colors">
-              <span className="block font-display tracking-[0.12em] text-[10px] text-accent uppercase">Drop-off time</span>
-              <div className="relative mt-1">
-                <select value={dropoffTime}
-                  onChange={(e) => setDropoffTime(e.target.value as DropoffTime)}
-                  className="w-full bg-transparent text-paper text-base focus:outline-none cursor-pointer appearance-none pr-7">
-                  <option className="text-ink">9:00 AM</option>
-                  <option className="text-ink">10:00 AM</option>
-                </select>
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 h-5 w-5 text-accent"
-                  fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </div>
-            </label>
+              value={endDate || "Pick a day →"}
+              isPlaceholder={!endDate}
+            />
+            {(() => {
+              const filled = true; // a value is always present
+              const labelColor = filled ? "text-accent" : "text-muted";
+              const valueColor = filled ? "text-paper" : "text-ink";
+              const surface = filled
+                ? "bg-ink"
+                : "bg-paper border border-ink/15 hover:border-ink/30";
+              return (
+                <label className={`block rounded-lg px-4 py-3 cursor-pointer transition-colors ${surface}`}>
+                  <span className={`block font-display tracking-[0.12em] text-[10px] uppercase ${labelColor}`}>Drop-off time</span>
+                  <div className="relative mt-1">
+                    <select value={dropoffTime}
+                      onChange={(e) => setDropoffTime(e.target.value as DropoffTime)}
+                      className={`w-full bg-transparent text-base focus:outline-none cursor-pointer appearance-none pr-7 ${valueColor}`}>
+                      <option className="text-ink">9:00 AM</option>
+                      <option className="text-ink">10:00 AM</option>
+                    </select>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 h-5 w-5 text-accent"
+                      fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </div>
+                </label>
+              );
+            })()}
           </div>
         </div>
         {startDate && (
@@ -1145,6 +1145,40 @@ function RateCell({ label, cents }: { label: string; cents: number | null | unde
         {typeof cents === "number" && cents > 0 ? formatCents(cents) : "—"}
       </p>
     </div>
+  );
+}
+
+// Date pick-target card. Mirrors the attachment-pill pattern: light
+// when the slot has no value yet, dark ink once a date is picked.
+// `active` shows an accent ring no matter which surface is rendered,
+// so the user always knows which slot the next calendar click will set.
+function DateSlotCard({
+  label, filled, active, onClick, value, isPlaceholder,
+}: {
+  label: string;
+  filled: boolean;
+  active: boolean;
+  onClick: () => void;
+  value: string;
+  isPlaceholder: boolean;
+}) {
+  const surface = filled
+    ? "bg-ink text-paper"
+    : "bg-paper border border-ink/15 text-ink hover:border-ink/30";
+  const labelColor = filled ? "text-accent" : "text-muted";
+  const valueColor = isPlaceholder
+    ? filled ? "text-paper/40" : "text-ink/40"
+    : "";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`text-left rounded-lg px-4 py-3 transition-colors ${surface} ${active ? "ring-2 ring-accent" : ""}`}
+    >
+      <span className={`block font-display tracking-[0.12em] text-[10px] uppercase ${labelColor}`}>{label}</span>
+      <span className={`mt-1 block font-mono text-base ${valueColor}`}>{value}</span>
+    </button>
   );
 }
 
