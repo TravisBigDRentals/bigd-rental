@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { customerSignInAction, customerSignUpAction } from "./actions";
 import { PasswordField } from "@/components/password-field";
@@ -61,6 +62,13 @@ export function CustomerAuthForm({ next, initialMode = "signin" }: { next: strin
           />
           {mode === "signup" && (
             <span className="mt-1 block text-xs text-muted">At least 8 characters.</span>
+          )}
+          {mode === "signin" && (
+            <div className="mt-2 text-right">
+              <Link href="/sign-in/forgot" className="text-xs text-muted underline hover:text-ink">
+                Forgot password?
+              </Link>
+            </div>
           )}
         </label>
         {mode === "signup" && password.length > 0 && (

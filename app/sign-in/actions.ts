@@ -1,9 +1,17 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-type Result = { error?: string } | null;
+type Result = { error?: string; ok?: string } | null;
+
+async function getOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
 
 export async function customerSignInAction(_prev: Result, formData: FormData): Promise<Result> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -42,6 +50,41 @@ export async function customerSignUpAction(_prev: Result, formData: FormData): P
   }
 
   redirect(safeNext(next));
+}
+
+export async function requestPasswordResetAction(_prev: Result, formData: FormData): Promise<Result> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email) return { error: "Email is required" };
+
+  const supabase = await createSupabaseServerClient();
+  const origin = await getOrigin();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/auth/callback?next=/sign-in/reset`,
+  });
+  // Don't disclose whether the email exists — same response either way.
+  // Real errors (rate limit, server) still bubble up.
+  if (error && !/not.*found|user.*exist/i.test(error.message)) {
+    return { error: error.message };
+  }
+  return { ok: "If that email has an account, a reset link is on the way. Check your inbox." };
+}
+
+export async function updatePasswordAction(_prev: Result, formData: FormData): Promise<Result> {
+  const password = String(formData.get("password") ?? "");
+  const passwordConfirm = String(formData.get("password_confirm") ?? "");
+  if (password.length < 8) return { error: "Password must be at least 8 characters" };
+  if (password !== passwordConfirm) return { error: "Passwords don't match — re-enter them in both fields" };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Reset link expired or invalid. Request a new one." };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: error.message };
+
+  redirect("/account/details");
 }
 
 export async function customerSignOutAction(): Promise<void> {
