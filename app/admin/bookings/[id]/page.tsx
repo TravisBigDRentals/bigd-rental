@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatCents } from "@/lib/pricing";
+import { ResendSignatureButton } from "./resend-signature-button";
 
 export const metadata = {
   title: "Booking detail — Big D's Admin",
@@ -212,8 +213,11 @@ export default async function BookingDetailPage({
                 <a href={booking.signed_agreement_pdf_url} target="_blank" rel="noopener" className="underline text-accent">
                   ↗ Download PDF
                 </a>
-              ) : "Not signed yet (Phase 3)"}
+              ) : "Not signed yet"}
             </p>
+            {!booking.signed_agreement_pdf_url && (
+              <ResendSignatureButton bookingId={booking.id} />
+            )}
           </div>
         </div>
       </section>
