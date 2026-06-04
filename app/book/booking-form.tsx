@@ -262,8 +262,11 @@ export function BookingForm({
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [equipmentId, setEquipmentId] = useState<string>("");
-  const [startDate, setStartDate] = useState<string>(initialStartDate ?? todayISO());
-  const [endDate, setEndDate] = useState<string>(initialEndDate ?? todayISO());
+  // Empty default — customer must explicitly pick both dates. No silent
+  // "today" prefill (was misleading + clashed with the new white/dark
+  // empty/filled visual state).
+  const [startDate, setStartDate] = useState<string>(initialStartDate ?? "");
+  const [endDate, setEndDate] = useState<string>(initialEndDate ?? "");
   // Empty string = "customer hasn't picked a time yet". We require an
   // explicit selection before letting them move past Step 1 — no
   // silently-accepted default.
@@ -459,7 +462,7 @@ export function BookingForm({
   }, [selectedEquipment, addonIds, addons]);
 
   const pricing = useMemo(() => {
-    if (!selectedEquipment) return null;
+    if (!selectedEquipment || !startDate || !endDate) return null;
     return calculatePricing({
       startDate,
       endDate,
