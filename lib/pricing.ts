@@ -14,18 +14,46 @@ export type PricingInput = {
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
   equipmentDailyRateCents: number;
+  // Optional tiered rates. When null/undefined, falls back to daily × days
+  // for every length (back-compat for any equipment row added before the
+  // tiered-rates migration).
+  equipmentWeeklyRateCents?: number | null;
+  equipmentMonthlyRateCents?: number | null;
   addons: AddonSelection[];
   discount?: Discount | null;
 };
 
+export type PricingTier = "daily" | "weekly" | "monthly";
+
 export type PricingBreakdown = {
   days: number;
   equipmentCents: number;
+  equipmentTier: PricingTier;
+  equipmentEffectiveDailyCents: number;  // per-day rate at the tier
   addonsCents: number;
   subtotalCents: number;
   discountCents: number;
   totalCents: number;
 };
+
+// Pick the tier and effective per-day rate based on how many days the
+// customer is renting for. Returns the daily-equivalent in cents (used
+// to compute equipment subtotal as effective * days). When the tier
+// rate is missing, falls back to plain daily for that tier.
+export function selectEquipmentTier(
+  days: number,
+  dailyCents: number,
+  weeklyCents?: number | null,
+  monthlyCents?: number | null,
+): { tier: PricingTier; effectiveDailyCents: number } {
+  if (days >= 30 && monthlyCents && monthlyCents > 0) {
+    return { tier: "monthly", effectiveDailyCents: monthlyCents / 30 };
+  }
+  if (days >= 7 && weeklyCents && weeklyCents > 0) {
+    return { tier: "weekly", effectiveDailyCents: weeklyCents / 7 };
+  }
+  return { tier: "daily", effectiveDailyCents: dailyCents };
+}
 
 // Rental days = end_date − delivery_date.
 //
@@ -43,7 +71,16 @@ export function rentalDays(startDate: string, endDate: string): number {
 // additional add-on is billed at its `daily_rate_cents` × days × quantity.
 export function calculatePricing(input: PricingInput): PricingBreakdown {
   const days = rentalDays(input.startDate, input.endDate);
-  const equipmentCents = input.equipmentDailyRateCents * days;
+  const { tier, effectiveDailyCents } = selectEquipmentTier(
+    days,
+    input.equipmentDailyRateCents,
+    input.equipmentWeeklyRateCents,
+    input.equipmentMonthlyRateCents,
+  );
+  // Round once at the equipment subtotal — weekly/monthly tiers produce
+  // non-integer cents per day, but the customer total is always in
+  // whole cents.
+  const equipmentCents = Math.round(effectiveDailyCents * days);
 
   const addonsCents = input.addons.reduce((sum, addon, i) => {
     if (i === 0) return sum; // first addon is free
@@ -56,6 +93,8 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
   return {
     days,
     equipmentCents,
+    equipmentTier: tier,
+    equipmentEffectiveDailyCents: effectiveDailyCents,
     addonsCents,
     subtotalCents,
     discountCents,

@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   // Validate equipment availability + fetch rate
   const { data: equipment, error: eqErr } = await supabase
     .from("equipment")
-    .select("id, daily_rate_cents, available_for_booking, type")
+    .select("id, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, available_for_booking, type")
     .eq("id", booking.equipment_id)
     .single();
   if (eqErr || !equipment) {
@@ -82,6 +82,8 @@ export async function POST(req: Request) {
     startDate: booking.start_date,
     endDate: booking.end_date,
     equipmentDailyRateCents: equipment.daily_rate_cents,
+    equipmentWeeklyRateCents: equipment.weekly_rate_cents,
+    equipmentMonthlyRateCents: equipment.monthly_rate_cents,
     addons: addons.map((a) => ({
       addonId: a.id,
       dailyRateCents: a.daily_rate_cents,

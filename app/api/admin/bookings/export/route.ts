@@ -21,7 +21,7 @@ type Customer = {
   project_province: string | null;
   project_postal_code: string | null;
 };
-type Equipment = { name: string; serial: string; daily_rate_cents: number };
+type Equipment = { name: string; serial: string; daily_rate_cents: number; weekly_rate_cents: number | null; monthly_rate_cents: number | null };
 type Addon = { name: string; daily_rate_cents: number };
 type BookingRow = {
   id: string;
@@ -88,7 +88,7 @@ export async function GET() {
         customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code,
         project_address_line1, project_address_line2, project_city, project_province, project_postal_code
       ),
-      equipment:equipment_id ( name, serial, daily_rate_cents ),
+      equipment:equipment_id ( name, serial, daily_rate_cents, weekly_rate_cents, monthly_rate_cents ),
       booking_addons ( addon:addon_id ( name, daily_rate_cents ) )
     `)
     .order("created_at", { ascending: false });
@@ -137,6 +137,8 @@ export async function GET() {
           startDate: raw.start_date,
           endDate: raw.end_date,
           equipmentDailyRateCents: equipment.daily_rate_cents,
+          equipmentWeeklyRateCents: equipment.weekly_rate_cents,
+          equipmentMonthlyRateCents: equipment.monthly_rate_cents,
           addons: addons.map((a) => ({ addonId: "", dailyRateCents: a.daily_rate_cents, quantity: 1 })),
         })
       : null;

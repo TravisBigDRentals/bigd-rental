@@ -453,6 +453,8 @@ export function BookingForm({
       startDate,
       endDate,
       equipmentDailyRateCents: selectedEquipment.daily_rate_cents,
+      equipmentWeeklyRateCents: selectedEquipment.weekly_rate_cents,
+      equipmentMonthlyRateCents: selectedEquipment.monthly_rate_cents,
       addons: selectedAddons.map((a) => ({
         addonId: a.id,
         dailyRateCents: a.daily_rate_cents,
@@ -1487,9 +1489,18 @@ function StepReview(props: {
       </div>
 
       <div className="rounded-2xl border border-ink/10 bg-ink/[0.02] p-5 space-y-2">
-        <div className="flex justify-between">
-          <span className="text-sm">{equipment.name} × {pricing.days} day{pricing.days === 1 ? "" : "s"}</span>
-          <span className="font-mono">{formatCents(pricing.equipmentCents)}</span>
+        <div className="flex flex-col gap-0.5">
+          <div className="flex justify-between">
+            <span className="text-sm">{equipment.name}</span>
+            <span className="font-mono">{formatCents(pricing.equipmentCents)}</span>
+          </div>
+          <div className="text-xs text-muted font-mono">
+            {pricing.equipmentTier === "monthly" && equipment.monthly_rate_cents
+              ? `${formatCents(equipment.monthly_rate_cents)}/mo · ${pricing.days} days`
+              : pricing.equipmentTier === "weekly" && equipment.weekly_rate_cents
+              ? `${formatCents(equipment.weekly_rate_cents)}/wk · ${pricing.days} days`
+              : `${formatCents(equipment.daily_rate_cents)}/day × ${pricing.days}`}
+          </div>
         </div>
         {pricing.addonsCents > 0 && (
           <div className="flex justify-between">

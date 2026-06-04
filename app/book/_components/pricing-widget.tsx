@@ -1,7 +1,7 @@
 "use client";
 
 import type { Addon, Equipment } from "@/lib/bookings/queries";
-import { computeDiscountCents, formatCents, rentalDays, type Discount } from "@/lib/pricing";
+import { computeDiscountCents, formatCents, rentalDays, selectEquipmentTier, type Discount, type PricingTier } from "@/lib/pricing";
 
 type PricingProps = {
   equipment: Equipment | null;
@@ -18,7 +18,20 @@ type PricingProps = {
 function computeTotals({ equipment, startDate, endDate, selectedAddons, appliedCoupon }: Pick<PricingProps, "equipment" | "startDate" | "endDate" | "selectedAddons" | "appliedCoupon">) {
   const days = startDate && endDate ? rentalDays(startDate, endDate) : 0;
   const haveDates = days > 0;
-  const equipmentSubtotal = equipment && haveDates ? equipment.daily_rate_cents * days : 0;
+
+  let equipmentSubtotal = 0;
+  let tier: PricingTier = "daily";
+  if (equipment && haveDates) {
+    const sel = selectEquipmentTier(
+      days,
+      equipment.daily_rate_cents,
+      equipment.weekly_rate_cents,
+      equipment.monthly_rate_cents,
+    );
+    tier = sel.tier;
+    equipmentSubtotal = Math.round(sel.effectiveDailyCents * days);
+  }
+
   const addonsSubtotal = selectedAddons.reduce((sum, a, i) => {
     if (!haveDates) return sum;
     if (i === 0) return sum;
@@ -31,9 +44,20 @@ function computeTotals({ equipment, startDate, endDate, selectedAddons, appliedC
   const discountCents = computeDiscountCents(subtotal, discount);
   return {
     days, haveDates, equipmentSubtotal, addonsSubtotal,
+    tier,
     discountCents,
     total: Math.max(0, subtotal - discountCents),
   };
+}
+
+function tierLabel(tier: PricingTier, equipment: { daily_rate_cents: number; weekly_rate_cents: number | null; monthly_rate_cents: number | null }, days: number): string {
+  if (tier === "monthly" && equipment.monthly_rate_cents) {
+    return `${formatCents(equipment.monthly_rate_cents)}/mo · ${days} day${days === 1 ? "" : "s"}`;
+  }
+  if (tier === "weekly" && equipment.weekly_rate_cents) {
+    return `${formatCents(equipment.weekly_rate_cents)}/wk · ${days} day${days === 1 ? "" : "s"}`;
+  }
+  return `${formatCents(equipment.daily_rate_cents)}/day${days > 0 ? ` × ${days}` : ""}`;
 }
 
 // Desktop: sticky sidebar that sits inside the form's grid as the
@@ -42,7 +66,7 @@ function computeTotals({ equipment, startDate, endDate, selectedAddons, appliedC
 // cleanly inside its grid cell.
 export function PricingWidget(props: PricingProps) {
   const { equipment, selectedAddons, appliedCoupon, nextLabel, nextDisabled, onNext, loading } = props;
-  const { days, haveDates, equipmentSubtotal, discountCents, total } = computeTotals(props);
+  const { days, haveDates, equipmentSubtotal, tier, discountCents, total } = computeTotals(props);
   const dayCountLabel = haveDates ? `${days} day${days === 1 ? "" : "s"}` : "Pick dates to see your total";
 
   return (
@@ -58,7 +82,9 @@ export function PricingWidget(props: PricingProps) {
               <div>
                 <p className="font-medium">{equipment.name}</p>
                 <p className="mt-0.5 font-mono text-xs text-muted">
-                  {formatCents(equipment.daily_rate_cents)}/day{haveDates ? ` × ${days}` : ""}
+                  {haveDates
+                    ? tierLabel(tier, equipment, days)
+                    : `${formatCents(equipment.daily_rate_cents)}/day`}
                 </p>
               </div>
               <span className="font-mono whitespace-nowrap">
