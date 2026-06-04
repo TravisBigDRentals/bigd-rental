@@ -3,6 +3,7 @@ import { getCurrentCustomer } from "@/lib/customers/current";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { BookingForm } from "./booking-form";
 import { SiteNav } from "@/components/site-nav";
+import { SiteFooter } from "@/components/site-footer";
 
 export const metadata = {
   title: "Book Equipment — Big D's Rental Co.",
@@ -121,13 +122,13 @@ export default async function BookPage({
       <SiteNav />
       <main className="flex-1 px-6 py-12 sm:py-16">
         <div className="max-w-6xl mx-auto">
-          <header className="mb-10">
-            <p className="font-mono text-xs tracking-widest text-muted uppercase">
-              Calgary, AB · Construction Equipment Rental
-            </p>
-            <h1 className="mt-2 font-display text-4xl sm:text-5xl font-bold tracking-tight">
+          <header className="mb-14 text-center">
+            <h1 className="font-display text-5xl sm:text-6xl md:text-7xl tracking-wide uppercase">
               Book Equipment
             </h1>
+            <p className="mt-3 text-base text-ink/70 max-w-xl mx-auto">
+              Choose your machine, set your dates, and we&rsquo;ll handle delivery and pickup.
+            </p>
           </header>
 
           {!prefillData && current && !current.customer && (
@@ -158,6 +159,7 @@ export default async function BookPage({
           />
         </div>
       </main>
+      <SiteFooter />
     </>
   );
 }

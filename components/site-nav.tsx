@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -9,46 +10,60 @@ export async function SiteNav() {
   const { data: { user } } = await supabase.auth.getUser();
   const signedIn = !!user;
 
+  // ABOUT, APPAREL, CONTACT URLs will land later; placeholder hashes
+  // for now so the layout is correct.
+  const links = [
+    { label: "HOME", href: "/" },
+    { label: "ABOUT", href: "#" },
+    { label: "RENT", href: "/book" },
+    { label: "APPAREL", href: "#" },
+    { label: "CONTACT", href: "#" },
+  ];
+
   return (
-    <nav className="sticky top-0 z-20 border-b border-ink/10 bg-paper/95 backdrop-blur supports-[backdrop-filter]:bg-paper/80">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
-        <Link href="/" className="font-display text-lg sm:text-xl font-bold tracking-tight whitespace-nowrap">
-          Big D&rsquo;s Rental Co.
+    <nav className="sticky top-0 z-30 border-b border-ink/10 bg-paper/95 backdrop-blur supports-[backdrop-filter]:bg-paper/85">
+      <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-6">
+        <Link href="/" className="flex items-center" aria-label="Big D's Rental Co. home">
+          <Image
+            src="/brand/big-d-footer-logo.png"
+            alt="Big D's Rental Co."
+            width={88}
+            height={56}
+            priority
+            className="h-12 w-auto"
+          />
         </Link>
-        <ul className="flex items-center gap-2 sm:gap-6 text-sm">
-          <li>
-            <Link href="/" className="hidden sm:inline-block px-2 py-2 text-ink/80 hover:text-ink transition-colors">
-              Home
-            </Link>
-          </li>
-          <li>
-            <Link href="/book" className="px-2 py-2 text-ink/80 hover:text-ink transition-colors">
-              Rentals
-            </Link>
-          </li>
-          <li>
-            <a href="mailto:info@bigdrentals.ca" className="hidden sm:inline-block px-2 py-2 text-ink/80 hover:text-ink transition-colors">
-              Contact
-            </a>
-          </li>
-          <li>
-            {signedIn ? (
+
+        <ul className="hidden md:flex items-center gap-8 font-display tracking-[0.08em] text-sm">
+          {links.map((l) => (
+            <li key={l.label}>
               <Link
-                href="/account"
-                className="rounded-full bg-accent px-4 sm:px-5 py-2 text-paper font-medium hover:bg-accent-hover transition-colors whitespace-nowrap"
+                href={l.href}
+                className="text-ink/90 hover:text-accent transition-colors"
               >
-                My account
+                {l.label}
               </Link>
-            ) : (
-              <Link
-                href="/sign-in?mode=signup"
-                className="rounded-full bg-accent px-4 sm:px-5 py-2 text-paper font-medium hover:bg-accent-hover transition-colors whitespace-nowrap"
-              >
-                Register
-              </Link>
-            )}
-          </li>
+            </li>
+          ))}
         </ul>
+
+        <div className="flex items-center gap-3">
+          {signedIn ? (
+            <Link
+              href="/account"
+              className="hidden sm:inline-flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-paper font-display tracking-[0.08em] text-sm hover:bg-accent-hover transition-colors"
+            >
+              MY ACCOUNT
+            </Link>
+          ) : (
+            <Link
+              href="/book"
+              className="inline-flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-paper font-display tracking-[0.08em] text-sm hover:bg-accent-hover transition-colors"
+            >
+              RENT <span aria-hidden>→</span>
+            </Link>
+          )}
+        </div>
       </div>
     </nav>
   );

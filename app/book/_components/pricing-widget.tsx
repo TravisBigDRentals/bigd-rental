@@ -60,63 +60,60 @@ function tierLabel(tier: PricingTier, equipment: { daily_rate_cents: number; wee
   return `${formatCents(equipment.daily_rate_cents)}/day${days > 0 ? ` × ${days}` : ""}`;
 }
 
-// Desktop: sticky sidebar that sits inside the form's grid as the
-// right column. Single grid child so the parent CSS Grid sees only
-// one item per column (form + this) and the sticky context works
-// cleanly inside its grid cell.
+// Desktop: sticky sidebar. Single grid child so the parent CSS Grid
+// sees only one item per column and sticky context works correctly.
 export function PricingWidget(props: PricingProps) {
   const { equipment, selectedAddons, appliedCoupon, nextLabel, nextDisabled, onNext, loading } = props;
   const { days, haveDates, equipmentSubtotal, tier, discountCents, total } = computeTotals(props);
-  const dayCountLabel = haveDates ? `${days} day${days === 1 ? "" : "s"}` : "Pick dates to see your total";
 
   return (
-    <aside className="hidden lg:block lg:sticky lg:top-20 self-start">
-      <div className="rounded-2xl border border-ink/15 bg-paper p-5 shadow-sm">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted">
-          {haveDates ? `Your rental · ${dayCountLabel}` : "Your rental"}
+    <aside className="hidden lg:block lg:sticky lg:top-24 self-start">
+      <div className="rounded-xl border border-ink/10 bg-ink/[0.04] p-5">
+        <p className="font-display tracking-[0.12em] text-xs uppercase text-muted">
+          {haveDates
+            ? <>Your rental · {days} day{days === 1 ? "" : "s"}</>
+            : "Your rental"}
         </p>
 
-        <ul className="mt-4 space-y-3 text-sm">
+        <ul className="mt-5 space-y-3">
           {equipment ? (
-            <li className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-medium">{equipment.name}</p>
-                <p className="mt-0.5 font-mono text-xs text-muted">
+            <li className="rounded-lg bg-paper border border-ink/10 px-4 py-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-display tracking-wide uppercase text-sm truncate">{equipment.name}</p>
+                <p className="mt-0.5 font-mono text-[11px] text-muted">
                   {haveDates
                     ? tierLabel(tier, equipment, days)
                     : `${formatCents(equipment.daily_rate_cents)}/day`}
                 </p>
               </div>
-              <span className="font-mono whitespace-nowrap">
+              <span className="font-mono text-sm font-semibold whitespace-nowrap">
                 {haveDates ? formatCents(equipmentSubtotal) : "—"}
               </span>
             </li>
           ) : (
-            <li className="text-muted text-sm">Pick a machine →</li>
+            <li className="rounded-lg bg-paper border border-ink/10 px-4 py-6 text-center font-display tracking-wide uppercase text-sm text-ink/40">
+              Pick a machine
+            </li>
           )}
 
           {selectedAddons.map((a, i) => {
             const isFree = i === 0;
             const sub = isFree || !haveDates ? 0 : a.daily_rate_cents * days;
             return (
-              <li key={a.id} className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium">{a.name}</p>
-                  <p className="mt-0.5 font-mono text-xs text-muted">
+              <li key={a.id} className="rounded-lg bg-paper border border-ink/10 px-4 py-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-display tracking-wide uppercase text-sm truncate">{a.name}</p>
+                  <p className="mt-0.5 font-mono text-[11px] text-muted">
                     {isFree ? "First attachment — free" : `${formatCents(a.daily_rate_cents)}/day${haveDates ? ` × ${days}` : ""}`}
                   </p>
                 </div>
-                <span className="font-mono whitespace-nowrap">
+                <span className="font-mono text-sm font-semibold whitespace-nowrap">
                   {isFree ? "Free" : haveDates ? formatCents(sub) : "—"}
                 </span>
               </li>
             );
           })}
         </ul>
-
-        {!haveDates && equipment && (
-          <p className="mt-4 text-xs text-muted">{dayCountLabel}</p>
-        )}
 
         {appliedCoupon && discountCents > 0 && (
           <div className="mt-4 flex items-center justify-between gap-3 text-sm text-emerald-800">
@@ -128,10 +125,10 @@ export function PricingWidget(props: PricingProps) {
           </div>
         )}
 
-        <div className="mt-5 pt-4 border-t border-ink/10 flex items-end justify-between gap-3">
-          <span className="font-display text-lg font-semibold">Total</span>
-          <span className="font-display text-2xl font-bold">
-            {haveDates ? formatCents(total) : "—"}
+        <div className="mt-6 pt-5 border-t border-ink/15 flex items-end justify-between gap-3">
+          <span className="font-display text-2xl tracking-wide uppercase">Total</span>
+          <span className="font-display text-3xl tracking-wide">
+            {haveDates ? formatCents(total) : formatCents(0)}
           </span>
         </div>
 
@@ -139,7 +136,7 @@ export function PricingWidget(props: PricingProps) {
           type="button"
           onClick={onNext}
           disabled={nextDisabled || !!loading}
-          className="mt-5 w-full rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+          className="mt-5 w-full rounded-md bg-accent px-6 py-3.5 text-paper font-display tracking-[0.1em] text-sm uppercase hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
         >
           {loading ? "…" : nextLabel}
         </button>
@@ -149,8 +146,7 @@ export function PricingWidget(props: PricingProps) {
 }
 
 // Mobile: fixed bottom bar. Lives OUTSIDE the form's grid so it
-// doesn't take up a grid cell (which was breaking the desktop
-// sidebar's sticky positioning).
+// doesn't take up a grid cell.
 export function PricingMobileBar(props: PricingProps) {
   const { nextLabel, nextDisabled, onNext, loading } = props;
   const { haveDates, total, days } = computeTotals(props);
@@ -159,10 +155,10 @@ export function PricingMobileBar(props: PricingProps) {
     <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-ink/15 bg-paper/95 backdrop-blur supports-[backdrop-filter]:bg-paper/85 shadow-[0_-4px_12px_rgba(15,17,20,0.06)]">
       <div className="max-w-3xl mx-auto px-6 py-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted truncate">
+          <p className="font-display tracking-[0.12em] text-[10px] uppercase text-muted truncate">
             {haveDates ? `Total · ${days} day${days === 1 ? "" : "s"}` : "Total"}
           </p>
-          <p className="font-display text-xl font-bold">
+          <p className="font-display text-2xl tracking-wide">
             {haveDates ? formatCents(total) : "—"}
           </p>
         </div>
@@ -170,7 +166,7 @@ export function PricingMobileBar(props: PricingProps) {
           type="button"
           onClick={onNext}
           disabled={nextDisabled || !!loading}
-          className="rounded-full bg-accent px-5 py-2.5 text-paper text-sm font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors whitespace-nowrap"
+          className="rounded-md bg-accent px-5 py-2.5 text-paper font-display tracking-[0.08em] text-xs uppercase hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors whitespace-nowrap"
         >
           {loading ? "…" : nextLabel}
         </button>

@@ -1,19 +1,10 @@
 import type { Metadata } from "next";
-import { DM_Sans, Syne, Space_Mono } from "next/font/google";
+import { Space_Mono } from "next/font/google";
 import "./globals.css";
 
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const syne = Syne({
-  variable: "--font-syne",
-  subsets: ["latin"],
-  display: "swap",
-});
-
+// Custom display + sans fonts (Anton, Degular) are loaded via @font-face
+// in globals.css from /public/fonts. Space Mono is still served via
+// next/font since we don't bundle it locally.
 const spaceMono = Space_Mono({
   variable: "--font-space-mono",
   subsets: ["latin"],
@@ -31,10 +22,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${dmSans.variable} ${syne.variable} ${spaceMono.variable} h-full`}
-    >
+    <html lang="en" className={`${spaceMono.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-paper text-ink">
         {children}
       </body>

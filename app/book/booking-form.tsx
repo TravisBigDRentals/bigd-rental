@@ -855,22 +855,30 @@ export function BookingForm({
 function StepIndicator({ step }: { step: Step }) {
   const labels = ["Configure", "Your info", "Review", "Sign", "Pay"];
   return (
-    <ol className="mb-10 flex flex-wrap items-center gap-2 font-mono text-xs uppercase tracking-widest">
+    <ol className="mb-12 flex items-start justify-between gap-2 sm:gap-4 max-w-3xl mx-auto">
       {labels.map((label, i) => {
         const n = (i + 1) as Step;
         const active = step === n;
         const done = step > n;
+        const reached = active || done;
+        const next = labels[i + 1];
         return (
-          <li key={label} className="flex items-center gap-2">
-            <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${
-              active ? "bg-accent text-paper"
-                : done ? "bg-ink text-paper"
-                : "border border-ink/20 text-muted"
-            }`}>
-              {done ? "✓" : n}
+          <li key={label} className="flex-1 flex flex-col items-center min-w-0 relative">
+            <div className="w-full flex items-center">
+              <span className={`relative z-10 flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full text-sm font-display tracking-wide shrink-0 ${
+                active ? "bg-ink text-paper"
+                  : done ? "bg-ink text-paper"
+                  : "bg-paper border border-ink/20 text-ink/40"
+              }`}>
+                {done ? "✓" : n}
+              </span>
+              {next && (
+                <span className={`flex-1 h-[2px] ml-1 sm:ml-2 ${reached && step > n ? "bg-accent" : active ? "bg-accent" : "bg-ink/15"}`} />
+              )}
+            </div>
+            <span className={`mt-2 text-xs sm:text-sm font-medium text-center truncate w-full ${reached ? "text-ink" : "text-ink/40"}`}>
+              {label}
             </span>
-            <span className={active || done ? "text-ink" : "text-muted"}>{label}</span>
-            {i < labels.length - 1 && <span className="mx-2 text-muted">·</span>}
           </li>
         );
       })}
@@ -910,35 +918,40 @@ function StepConfigure(props: {
   } = props;
 
   return (
-    <section className="space-y-8">
+    <section className="space-y-12">
       <div>
-        <h2 className="font-display text-2xl font-semibold">Pick a machine</h2>
-        <div className="mt-4 flex flex-col lg:flex-row gap-4 lg:gap-6 lg:items-start">
+        <SectionTitle>Pick a machine</SectionTitle>
+        <div className="mt-6 flex flex-col lg:flex-row gap-5 lg:items-start">
           {/* Machine cards: single-column stack on the left */}
-          <div className="lg:flex-1 lg:min-w-0 space-y-3">
+          <div className="lg:flex-1 lg:min-w-0 space-y-4">
             {equipment.map((eq) => {
               const selected = equipmentId === eq.id;
               return (
                 <button key={eq.id} type="button" onClick={() => setEquipmentId(eq.id)}
-                  className={`w-full text-left rounded-2xl border p-5 transition-colors ${
-                    selected ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30 bg-paper"
+                  className={`w-full text-left rounded-xl border bg-paper transition-all ${
+                    selected
+                      ? "border-accent shadow-[0_0_0_3px_rgba(213,139,27,0.15)]"
+                      : "border-ink/15 hover:border-ink/30"
                   }`}>
-                  <p className="font-display text-lg font-semibold">{eq.name}</p>
-                  <p className="mt-1 font-mono text-xs text-muted">{eq.serial}</p>
-                  {eq.description && (
-                    <p className="mt-3 text-sm text-ink/80 leading-relaxed">{eq.description}</p>
-                  )}
-                  <p className="mt-3 text-sm">
-                    <span className="font-mono">{formatCents(eq.daily_rate_cents)}</span>
-                    <span className="text-muted"> / day</span>
-                  </p>
+                  <div className="p-5 pb-4">
+                    <p className="font-display text-xl tracking-wide uppercase">{eq.name}</p>
+                    <p className="mt-1 font-mono text-xs text-muted">{eq.serial}</p>
+                    {eq.description && (
+                      <p className="mt-3 text-sm text-ink/75 leading-relaxed">{eq.description}</p>
+                    )}
+                  </div>
+                  <div className="border-t border-ink/10 grid grid-cols-3 divide-x divide-ink/10">
+                    <RateCell label="Daily rate" cents={eq.daily_rate_cents} />
+                    <RateCell label="Weekly rate" cents={eq.weekly_rate_cents} />
+                    <RateCell label="Monthly rate" cents={eq.monthly_rate_cents} />
+                  </div>
                 </button>
               );
             })}
           </div>
           {/* Image preview panel */}
           <div className="lg:flex-1 lg:min-w-0">
-            <div className="aspect-[4/3] rounded-2xl bg-white border border-ink/10 overflow-hidden p-4 flex items-center justify-center">
+            <div className="aspect-[4/3] rounded-xl bg-paper border border-ink/10 overflow-hidden p-6 flex items-center justify-center">
               {previewImageUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -947,7 +960,7 @@ function StepConfigure(props: {
                   className="max-w-full max-h-full object-contain"
                 />
               ) : (
-                <p className="text-sm text-muted px-6 text-center">
+                <p className="font-display tracking-wide uppercase text-sm text-ink/40 text-center px-6">
                   Select a machine to see what you&rsquo;re renting.
                 </p>
               )}
@@ -958,27 +971,35 @@ function StepConfigure(props: {
 
       {equipmentId && compatibleAddons.length > 0 && (
         <div>
-          <h2 className="font-display text-2xl font-semibold">Attachments</h2>
-          <p className="mt-1 text-sm text-muted">
+          <SectionTitle>Attachments</SectionTitle>
+          <p className="mt-3 text-sm text-muted">
             First attachment is free. Each additional attachment is{" "}
             {formatCents(compatibleAddons[0]?.daily_rate_cents ?? 4000)}/day.
           </p>
-          <div className="mt-4 space-y-2">
+          <div className="mt-5 space-y-2.5">
             {compatibleAddons.map((addon) => {
               const checked = addonIds.includes(addon.id);
               return (
                 <label key={addon.id}
-                  className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
-                    checked ? "border-accent bg-accent/5" : "border-ink/15 hover:border-ink/30"
+                  className={`flex items-center justify-between gap-3 rounded-full border px-5 py-3.5 cursor-pointer transition-colors ${
+                    checked
+                      ? "border-ink bg-ink text-paper"
+                      : "border-ink/15 bg-paper hover:border-ink/30"
                   }`}>
-                  <span className="flex items-center gap-3">
-                    <input type="checkbox" checked={checked}
-                      onChange={() => toggleAddon(addon.id)}
-                      className="h-4 w-4 accent-[var(--color-accent)]" />
-                    <span>{addon.name}</span>
+                  <span className="flex items-center gap-3 min-w-0">
+                    <span className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border shrink-0 ${
+                      checked ? "border-accent" : "border-ink/30"
+                    }`}>
+                      {checked && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
+                      <input type="checkbox" checked={checked}
+                        onChange={() => toggleAddon(addon.id)}
+                        className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </span>
+                    <span className="font-display tracking-wide uppercase text-sm truncate">{addon.name}</span>
                   </span>
-                  <span className="font-mono text-sm text-muted">
-                    {formatCents(addon.daily_rate_cents)}/day
+                  <span className="font-mono text-sm whitespace-nowrap">
+                    <span className="font-semibold">{formatCents(addon.daily_rate_cents)}</span>
+                    <span className={checked ? "text-paper/70" : "text-muted"}>/day</span>
                   </span>
                 </label>
               );
@@ -988,17 +1009,17 @@ function StepConfigure(props: {
       )}
 
       <div>
-        <h2 className="font-display text-2xl font-semibold">Rental dates</h2>
+        <SectionTitle>Rental dates</SectionTitle>
         {equipmentId ? (
-          <p className="mt-1 text-sm text-muted">
+          <p className="mt-3 text-sm text-muted">
             Click two dates on the calendar to pick a range, or click <strong>Delivery date</strong> /{" "}
             <strong>Pickup date</strong> first to control which one the next click sets. Greyed-out days are unavailable.
           </p>
         ) : (
-          <p className="mt-1 text-sm text-muted">Pick a machine above to see availability.</p>
+          <p className="mt-3 text-sm text-muted">Pick a machine above to see availability.</p>
         )}
 
-        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-start">
           {equipmentId && (
             <DateRangeCalendar
               startDate={startDate}
@@ -1007,63 +1028,59 @@ function StepConfigure(props: {
               blockedRanges={blockedRanges}
             />
           )}
-          <div className="flex flex-col gap-4 lg:min-w-[220px]">
+          <div className="flex flex-col gap-3 lg:min-w-[260px]">
             <button
               type="button"
               onClick={() => setActiveField("delivery")}
               aria-pressed={activeField === "delivery"}
-              className={`text-left rounded-lg border px-3 py-2 transition-colors ${
-                activeField === "delivery"
-                  ? "border-accent bg-accent/5 ring-1 ring-accent"
-                  : "border-ink/15 bg-paper hover:border-ink/30"
+              className={`text-left rounded-lg px-4 py-3 transition-all bg-ink text-paper ${
+                activeField === "delivery" ? "ring-2 ring-accent" : "ring-0 hover:bg-ink/90"
               }`}
             >
-              <span className="block text-xs font-medium text-muted">Delivery date</span>
-              <span className="mt-1 block font-mono text-sm">
-                {startDate || <span className="text-muted">Click a day on the calendar →</span>}
+              <span className="block font-display tracking-[0.12em] text-[10px] text-accent uppercase">Delivery date</span>
+              <span className="mt-1 block font-mono text-base">
+                {startDate || <span className="text-paper/40">Pick a day →</span>}
               </span>
             </button>
             <button
               type="button"
               onClick={() => setActiveField("pickup")}
               aria-pressed={activeField === "pickup"}
-              className={`text-left rounded-lg border px-3 py-2 transition-colors ${
-                activeField === "pickup"
-                  ? "border-accent bg-accent/5 ring-1 ring-accent"
-                  : "border-ink/15 bg-paper hover:border-ink/30"
+              className={`text-left rounded-lg px-4 py-3 transition-all bg-ink text-paper ${
+                activeField === "pickup" ? "ring-2 ring-accent" : "ring-0 hover:bg-ink/90"
               }`}
             >
-              <span className="block text-xs font-medium text-muted">Pickup date</span>
-              <span className="mt-1 block font-mono text-sm">
-                {endDate || <span className="text-muted">Click a day on the calendar →</span>}
+              <span className="block font-display tracking-[0.12em] text-[10px] text-accent uppercase">Pickup date</span>
+              <span className="mt-1 block font-mono text-base">
+                {endDate || <span className="text-paper/40">Pick a day →</span>}
               </span>
             </button>
-            <label className="block">
-              <span className="block text-sm font-medium">Drop-off time</span>
+            <label className="block rounded-lg px-4 py-3 bg-ink text-paper">
+              <span className="block font-display tracking-[0.12em] text-[10px] text-accent uppercase">Drop-off time</span>
               <select value={dropoffTime}
                 onChange={(e) => setDropoffTime(e.target.value as DropoffTime)}
-                className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2">
-                <option>9:00 AM</option>
-                <option>10:00 AM</option>
+                className="mt-1 w-full bg-transparent text-paper text-base focus:outline-none cursor-pointer appearance-none">
+                <option className="text-ink">9:00 AM</option>
+                <option className="text-ink">10:00 AM</option>
               </select>
             </label>
           </div>
         </div>
         {startDate && (
-          <div className="mt-4 rounded-lg border border-ink/15 bg-ink/[0.03] px-4 py-3 flex items-center gap-3">
-            <span className="text-lg" aria-hidden>📅</span>
+          <div className="mt-5 rounded-lg bg-paper border border-ink/10 px-4 py-3 flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-accent text-paper text-base shrink-0" aria-hidden>📅</span>
             <p className="text-sm">
-              <span className="text-muted">Equipment drop-off: </span>
+              <span className="font-display tracking-[0.08em] text-xs uppercase text-muted">Equipment drop-off: </span>
               <span className="font-medium">{formatLongDate(startDate)}</span>
               <span className="text-muted"> at {dropoffTime}</span>
             </p>
           </div>
         )}
         {pickupDate && (
-          <div className="mt-3 rounded-lg border border-ink/15 bg-ink/[0.03] px-4 py-3 flex items-center gap-3">
-            <span className="text-lg" aria-hidden>📅</span>
+          <div className="mt-3 rounded-lg bg-paper border border-ink/10 px-4 py-3 flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-accent text-paper text-base shrink-0" aria-hidden>📅</span>
             <p className="text-sm">
-              <span className="text-muted">Equipment pickup: </span>
+              <span className="font-display tracking-[0.08em] text-xs uppercase text-muted">Equipment pickup: </span>
               <span className="font-medium">{formatLongDate(pickupDate)}</span>
               <span className="text-muted"> at {dropoffTime}</span>
             </p>
@@ -1093,6 +1110,31 @@ function StepConfigure(props: {
       </div>
 
     </section>
+  );
+}
+
+// Section heading: small orange square bullet + heavy uppercase title.
+// Shared across Step 1's "Pick a machine", "Attachments", "Rental dates"
+// sections to match the new design system.
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="inline-block h-3 w-3 bg-accent shrink-0" aria-hidden />
+      <h2 className="font-display text-2xl sm:text-3xl tracking-wide uppercase">{children}</h2>
+    </div>
+  );
+}
+
+// Tiered-rate cell used on each machine card (Daily / Weekly / Monthly).
+// Renders an em-dash when the tier isn't priced for that equipment.
+function RateCell({ label, cents }: { label: string; cents: number | null | undefined }) {
+  return (
+    <div className="px-4 py-3 text-left">
+      <p className="font-display text-[10px] sm:text-xs tracking-[0.12em] uppercase text-accent">{label}</p>
+      <p className="mt-1 font-mono text-base font-semibold">
+        {typeof cents === "number" && cents > 0 ? formatCents(cents) : "—"}
+      </p>
+    </div>
   );
 }
 
