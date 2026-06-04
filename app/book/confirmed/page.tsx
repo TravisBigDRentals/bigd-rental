@@ -105,10 +105,16 @@ export default async function ConfirmedPage({
 
         <div className="mt-10 flex flex-wrap items-center gap-3">
           <Link
-            href="/book"
+            href={`/book?prefill=${booking.id}`}
             className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover transition-colors"
           >
-            Book another rental
+            Add another machine for these dates →
+          </Link>
+          <Link
+            href="/book"
+            className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 transition-colors"
+          >
+            Start a new booking
           </Link>
           <Link
             href="/"

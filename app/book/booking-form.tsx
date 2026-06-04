@@ -244,19 +244,27 @@ export function BookingForm({
   initialCustomer = null,
   isAuthenticated = false,
   authEmail = null,
+  initialStartDate = null,
+  initialEndDate = null,
+  initialDropoffTime = null,
+  prefillNotice = null,
 }: {
   equipment: Equipment[];
   addons: Addon[];
   initialCustomer?: InitialCustomer | null;
   isAuthenticated?: boolean;
   authEmail?: string | null;
+  initialStartDate?: string | null;
+  initialEndDate?: string | null;
+  initialDropoffTime?: DropoffTime | null;
+  prefillNotice?: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [equipmentId, setEquipmentId] = useState<string>("");
-  const [startDate, setStartDate] = useState<string>(todayISO());
-  const [endDate, setEndDate] = useState<string>(todayISO());
-  const [dropoffTime, setDropoffTime] = useState<DropoffTime>("9:00 AM");
+  const [startDate, setStartDate] = useState<string>(initialStartDate ?? todayISO());
+  const [endDate, setEndDate] = useState<string>(initialEndDate ?? todayISO());
+  const [dropoffTime, setDropoffTime] = useState<DropoffTime>(initialDropoffTime ?? "9:00 AM");
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [customer, setCustomer] = useState<CustomerState>(
     () => customerStateFromInitial(initialCustomer, authEmail),
@@ -687,6 +695,12 @@ export function BookingForm({
   return (
     <div>
       <StepIndicator step={step} />
+
+      {prefillNotice && (
+        <div className="mb-6 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
+          {prefillNotice}
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
