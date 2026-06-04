@@ -34,20 +34,20 @@ export async function SiteNav() {
           />
         </Link>
 
-        <ul className="hidden md:flex items-center gap-8 font-display tracking-[0.08em] text-sm">
-          {links.map((l) => (
-            <li key={l.label}>
-              <Link
-                href={l.href}
-                className="text-ink/90 hover:text-accent transition-colors"
-              >
-                {l.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <div className="flex items-center gap-8">
+          <ul className="hidden md:flex items-center gap-8 font-display tracking-[0.08em] text-sm">
+            {links.map((l) => (
+              <li key={l.label}>
+                <Link
+                  href={l.href}
+                  className="text-ink/90 hover:text-accent transition-colors"
+                >
+                  {l.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
 
-        <div className="flex items-center gap-3">
           {signedIn ? (
             <Link
               href="/account"
