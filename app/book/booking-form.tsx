@@ -264,7 +264,10 @@ export function BookingForm({
   const [equipmentId, setEquipmentId] = useState<string>("");
   const [startDate, setStartDate] = useState<string>(initialStartDate ?? todayISO());
   const [endDate, setEndDate] = useState<string>(initialEndDate ?? todayISO());
-  const [dropoffTime, setDropoffTime] = useState<DropoffTime>(initialDropoffTime ?? "9:00 AM");
+  // Empty string = "customer hasn't picked a time yet". We require an
+  // explicit selection before letting them move past Step 1 — no
+  // silently-accepted default.
+  const [dropoffTime, setDropoffTime] = useState<DropoffTime | "">(initialDropoffTime ?? "");
   const [addonIds, setAddonIds] = useState<string[]>([]);
   const [customer, setCustomer] = useState<CustomerState>(
     () => customerStateFromInitial(initialCustomer, authEmail),
@@ -554,6 +557,7 @@ export function BookingForm({
     if (new Date(endDate) <= new Date(startDate)) {
       return setError("Pickup date must be at least one day after the delivery date");
     }
+    if (!dropoffTime) return setError("Pick a drop-off time");
 
     setCheckingAvailability(true);
     try {
@@ -895,7 +899,7 @@ function StepConfigure(props: {
   startDate: string;
   endDate: string;
   pickupDate: string;
-  dropoffTime: DropoffTime; setDropoffTime: (t: DropoffTime) => void;
+  dropoffTime: DropoffTime | ""; setDropoffTime: (t: DropoffTime | "") => void;
   compatibleAddons: Addon[];
   addonIds: string[]; toggleAddon: (id: string) => void;
   pricing: ReturnType<typeof calculatePricing> | null;
@@ -1046,9 +1050,9 @@ function StepConfigure(props: {
               isPlaceholder={!endDate}
             />
             {(() => {
-              const filled = true; // a value is always present
+              const filled = !!dropoffTime;
               const labelColor = filled ? "text-accent" : "text-muted";
-              const valueColor = filled ? "text-paper" : "text-ink";
+              const valueColor = filled ? "text-paper" : "text-ink/40";
               const surface = filled
                 ? "bg-ink"
                 : "bg-paper border border-ink/15 hover:border-ink/30";
@@ -1057,8 +1061,9 @@ function StepConfigure(props: {
                   <span className={`block font-display tracking-[0.12em] text-[10px] uppercase ${labelColor}`}>Drop-off time</span>
                   <div className="relative mt-1">
                     <select value={dropoffTime}
-                      onChange={(e) => setDropoffTime(e.target.value as DropoffTime)}
+                      onChange={(e) => setDropoffTime(e.target.value as DropoffTime | "")}
                       className={`w-full bg-transparent text-base focus:outline-none cursor-pointer appearance-none pr-7 ${valueColor}`}>
+                      <option value="" disabled className="text-ink">Select a time</option>
                       <option className="text-ink">9:00 AM</option>
                       <option className="text-ink">10:00 AM</option>
                     </select>
@@ -1082,7 +1087,7 @@ function StepConfigure(props: {
             <p className="text-sm">
               <span className="font-display tracking-[0.08em] text-xs uppercase text-muted">Equipment drop-off: </span>
               <span className="font-medium">{formatLongDate(startDate)}</span>
-              <span className="text-muted"> at {dropoffTime}</span>
+              {dropoffTime && <span className="text-muted"> at {dropoffTime}</span>}
             </p>
           </div>
         )}
@@ -1092,7 +1097,7 @@ function StepConfigure(props: {
             <p className="text-sm">
               <span className="font-display tracking-[0.08em] text-xs uppercase text-muted">Equipment pickup: </span>
               <span className="font-medium">{formatLongDate(pickupDate)}</span>
-              <span className="text-muted"> at {dropoffTime}</span>
+              {dropoffTime && <span className="text-muted"> at {dropoffTime}</span>}
             </p>
           </div>
         )}
@@ -1500,7 +1505,7 @@ function Field({ label, className = "", children }: {
 function StepReview(props: {
   equipment: Equipment;
   startDate: string; endDate: string; pickupDate: string;
-  dropoffTime: DropoffTime;
+  dropoffTime: DropoffTime | "";
   addons: Addon[];
   customer: CustomerState;
   specialInstructions: string;
