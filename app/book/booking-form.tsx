@@ -1225,7 +1225,7 @@ function StepCustomer(props: {
   return (
     <section className="space-y-10">
       <div>
-        <h2 className="text-2xl font-bold">Your info</h2>
+        <h2 className="text-2xl font-bold uppercase">Your info</h2>
         <p className="mt-1 text-sm text-muted">All fields marked * are required.</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="First name *">
@@ -1299,7 +1299,7 @@ function StepCustomer(props: {
       </div>
 
       <div>
-        <h2 className="text-2xl font-bold">Driver&rsquo;s license</h2>
+        <h2 className="text-2xl font-bold uppercase">Driver&rsquo;s license</h2>
 
         {hasPreviousLicense ? (
           <>
@@ -1357,7 +1357,7 @@ function StepCustomer(props: {
       </div>
 
       <div>
-        <h2 className="text-2xl font-bold">Billing Address</h2>
+        <h2 className="text-2xl font-bold uppercase">Billing Address</h2>
         <p className="mt-1 text-sm text-muted">
           Please enter the legal address for your business and or billing address for the credit card that will be used for payment.
         </p>
@@ -1391,7 +1391,7 @@ function StepCustomer(props: {
       </div>
 
       <div>
-        <h2 className="text-2xl font-bold">Project address</h2>
+        <h2 className="text-2xl font-bold uppercase">Project address</h2>
         <p className="mt-1 text-sm text-muted">
           Where the equipment will be dropped off to and used (job site). The equipment will also be collected from this address.
         </p>
@@ -1426,7 +1426,7 @@ function StepCustomer(props: {
 
       {showSaveInfoOption && (
         <div>
-          <h2 className="text-2xl font-bold">Save your info?</h2>
+          <h2 className="text-2xl font-bold uppercase">Save your info?</h2>
           <p className="mt-1 text-sm text-muted">
             Optional. Create an account using the email above so this booking
             shows in your account portal and your info pre-fills next time.
