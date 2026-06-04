@@ -63,7 +63,7 @@ export function CustomerAuthForm({ next, initialMode = "signin" }: { next: strin
             <span className="mt-1 block text-xs text-muted">At least 8 characters.</span>
           )}
         </label>
-        {mode === "signup" && (
+        {mode === "signup" && password.length > 0 && (
           <label className="block">
             <span className="block text-sm font-medium">Confirm password</span>
             <PasswordField
