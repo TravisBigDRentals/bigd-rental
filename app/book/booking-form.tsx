@@ -1545,7 +1545,7 @@ function StepReview(props: {
   return (
     <section className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">Review your booking</h2>
+        <h2 className="text-2xl font-bold uppercase">Review your booking</h2>
         <p className="mt-1 text-sm text-muted">
           Confirm everything looks right before proceeding to payment.
         </p>
@@ -1608,7 +1608,7 @@ function StepReview(props: {
       </div>
 
       <div>
-        <h2 className="text-lg font-bold">Have a discount code?</h2>
+        <h2 className="text-lg font-bold uppercase">Have a discount code?</h2>
         {appliedCoupon ? (
           <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
             <span>
@@ -1804,7 +1804,7 @@ function StepSign({
   return (
     <section className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Sign your rental agreement</h2>
+        <h2 className="text-2xl font-bold uppercase">Sign your rental agreement</h2>
         <p className="mt-1 text-sm text-muted">
           The agreement will open in a signing window. Review carefully, sign at the bottom, and submit.
           Your signed copy will be stored with the booking and emailed to you after payment.
@@ -1877,7 +1877,7 @@ function StepPay({
   return (
     <section className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Billing Details</h2>
+        <h2 className="text-2xl font-bold uppercase">Billing Details</h2>
         <p className="mt-1 text-sm text-muted">
           Card details are tokenized by Square directly — they never touch our servers.
         </p>
