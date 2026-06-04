@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatCents } from "@/lib/pricing";
 import { CreateCouponForm } from "./create-form";
@@ -80,16 +81,22 @@ export default async function CouponsAdminPage() {
                   const exhausted = c.max_uses !== null && used >= c.max_uses;
                   const live = c.active && !expired && !exhausted;
                   return (
-                    <tr key={c.id}>
-                      <td className="px-4 py-3 font-mono font-semibold">{c.code}</td>
+                    <tr key={c.id} className="hover:bg-ink/[0.02]">
+                      <td className="px-4 py-3 font-mono font-semibold">
+                        <Link href={`/admin/coupons/${c.id}`} className="hover:underline">
+                          {c.code}
+                        </Link>
+                      </td>
                       <td className="px-4 py-3">
                         {c.discount_type === "percent"
                           ? `${c.discount_value}% off`
                           : `${formatCents(c.discount_value)} off`}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
-                        {used}
-                        {c.max_uses !== null ? ` / ${c.max_uses}` : " / ∞"}
+                        <Link href={`/admin/coupons/${c.id}`} className="hover:underline text-accent">
+                          {used}
+                          {c.max_uses !== null ? ` / ${c.max_uses}` : " / ∞"}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">
                         {c.expires_at ? new Date(c.expires_at).toLocaleDateString("en-CA") : "—"}
