@@ -12,6 +12,7 @@ export type Equipment = {
   insured_value_cents: number | null;
   available_for_booking: boolean;
   image_url: string | null;
+  description: string | null;
 };
 
 export type Addon = {
@@ -26,7 +27,7 @@ export async function listEquipment(): Promise<Equipment[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("equipment")
-    .select("id, name, serial, type, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, insured_value_cents, available_for_booking, image_url")
+    .select("id, name, serial, type, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, insured_value_cents, available_for_booking, image_url, description")
     .eq("available_for_booking", true)
     .order("name");
   if (error) throw error;

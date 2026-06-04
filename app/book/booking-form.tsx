@@ -911,6 +911,9 @@ function StepConfigure(props: {
                   }`}>
                   <p className="font-display text-lg font-semibold">{eq.name}</p>
                   <p className="mt-1 font-mono text-xs text-muted">{eq.serial}</p>
+                  {eq.description && (
+                    <p className="mt-3 text-sm text-ink/80 leading-relaxed">{eq.description}</p>
+                  )}
                   <p className="mt-3 text-sm">
                     <span className="font-mono">{formatCents(eq.daily_rate_cents)}</span>
                     <span className="text-muted"> / day</span>
