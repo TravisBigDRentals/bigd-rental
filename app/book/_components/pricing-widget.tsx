@@ -1,20 +1,21 @@
 "use client";
 
 import type { Addon, Equipment } from "@/lib/bookings/queries";
-import { formatCents, rentalDays } from "@/lib/pricing";
+import { computeDiscountCents, formatCents, rentalDays, type Discount } from "@/lib/pricing";
 
 type PricingProps = {
   equipment: Equipment | null;
   startDate: string;
   endDate: string;
   selectedAddons: Addon[];
+  appliedCoupon?: { code: string; discount_type: "percent" | "amount"; discount_value: number } | null;
   nextLabel: string;
   nextDisabled: boolean;
   onNext: () => void;
   loading?: boolean;
 };
 
-function computeTotals({ equipment, startDate, endDate, selectedAddons }: Pick<PricingProps, "equipment" | "startDate" | "endDate" | "selectedAddons">) {
+function computeTotals({ equipment, startDate, endDate, selectedAddons, appliedCoupon }: Pick<PricingProps, "equipment" | "startDate" | "endDate" | "selectedAddons" | "appliedCoupon">) {
   const days = startDate && endDate ? rentalDays(startDate, endDate) : 0;
   const haveDates = days > 0;
   const equipmentSubtotal = equipment && haveDates ? equipment.daily_rate_cents * days : 0;
@@ -23,7 +24,16 @@ function computeTotals({ equipment, startDate, endDate, selectedAddons }: Pick<P
     if (i === 0) return sum;
     return sum + a.daily_rate_cents * days;
   }, 0);
-  return { days, haveDates, equipmentSubtotal, addonsSubtotal, total: equipmentSubtotal + addonsSubtotal };
+  const subtotal = equipmentSubtotal + addonsSubtotal;
+  const discount: Discount | null = appliedCoupon
+    ? { type: appliedCoupon.discount_type, value: appliedCoupon.discount_value }
+    : null;
+  const discountCents = computeDiscountCents(subtotal, discount);
+  return {
+    days, haveDates, equipmentSubtotal, addonsSubtotal,
+    discountCents,
+    total: Math.max(0, subtotal - discountCents),
+  };
 }
 
 // Desktop: sticky sidebar that sits inside the form's grid as the
@@ -31,8 +41,8 @@ function computeTotals({ equipment, startDate, endDate, selectedAddons }: Pick<P
 // one item per column (form + this) and the sticky context works
 // cleanly inside its grid cell.
 export function PricingWidget(props: PricingProps) {
-  const { equipment, selectedAddons, nextLabel, nextDisabled, onNext, loading } = props;
-  const { days, haveDates, equipmentSubtotal, total } = computeTotals(props);
+  const { equipment, selectedAddons, appliedCoupon, nextLabel, nextDisabled, onNext, loading } = props;
+  const { days, haveDates, equipmentSubtotal, discountCents, total } = computeTotals(props);
   const dayCountLabel = haveDates ? `${days} day${days === 1 ? "" : "s"}` : "Pick dates to see your total";
 
   return (
@@ -80,6 +90,16 @@ export function PricingWidget(props: PricingProps) {
 
         {!haveDates && equipment && (
           <p className="mt-4 text-xs text-muted">{dayCountLabel}</p>
+        )}
+
+        {appliedCoupon && discountCents > 0 && (
+          <div className="mt-4 flex items-center justify-between gap-3 text-sm text-emerald-800">
+            <span>
+              Discount{" "}
+              <span className="font-mono text-xs text-emerald-700">({appliedCoupon.code})</span>
+            </span>
+            <span className="font-mono whitespace-nowrap">−{formatCents(discountCents)}</span>
+          </div>
         )}
 
         <div className="mt-5 pt-4 border-t border-ink/10 flex items-end justify-between gap-3">

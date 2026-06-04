@@ -6,17 +6,24 @@ export type AddonSelection = {
   quantity: number;
 };
 
+export type Discount =
+  | { type: "percent"; value: number }   // 1-100
+  | { type: "amount"; value: number };   // cents off
+
 export type PricingInput = {
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
   equipmentDailyRateCents: number;
   addons: AddonSelection[];
+  discount?: Discount | null;
 };
 
 export type PricingBreakdown = {
   days: number;
   equipmentCents: number;
   addonsCents: number;
+  subtotalCents: number;
+  discountCents: number;
   totalCents: number;
 };
 
@@ -43,12 +50,27 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
     return sum + addon.dailyRateCents * days * addon.quantity;
   }, 0);
 
+  const subtotalCents = equipmentCents + addonsCents;
+  const discountCents = computeDiscountCents(subtotalCents, input.discount);
+
   return {
     days,
     equipmentCents,
     addonsCents,
-    totalCents: equipmentCents + addonsCents,
+    subtotalCents,
+    discountCents,
+    totalCents: Math.max(0, subtotalCents - discountCents),
   };
+}
+
+// Discount is clamped to the subtotal so a $100-off code on a $40 booking
+// becomes a $40 discount (the booking total floors at $0, never negative).
+export function computeDiscountCents(subtotalCents: number, discount?: Discount | null): number {
+  if (!discount) return 0;
+  const raw = discount.type === "percent"
+    ? Math.floor((subtotalCents * discount.value) / 100)
+    : discount.value;
+  return Math.min(Math.max(0, raw), subtotalCents);
 }
 
 export function formatCents(cents: number): string {

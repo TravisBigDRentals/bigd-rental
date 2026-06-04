@@ -32,6 +32,12 @@ type Equipment = { name: string; serial: string };
 
 type AddonRow = { id: string; quantity: number; daily_rate_cents: number; addon: { name: string } | null };
 
+type Coupon = {
+  code: string;
+  discount_type: "percent" | "amount";
+  discount_value: number;
+};
+
 type BookingDetail = {
   id: string;
   start_date: string;
@@ -40,6 +46,7 @@ type BookingDetail = {
   special_instructions: string | null;
   status: string;
   total_cents: number;
+  discount_cents: number;
   payment_intent_id: string | null;
   paid_at: string | null;
   signed_agreement_pdf_url: string | null;
@@ -51,6 +58,7 @@ type BookingDetail = {
   customer: Customer | null;
   equipment: Equipment | null;
   booking_addons: AddonRow[] | null;
+  coupon: Coupon | null;
 };
 
 async function signedDlUrl(path: string | null): Promise<string | null> {
@@ -74,12 +82,13 @@ export default async function BookingDetailPage({
     .from("bookings")
     .select(`
       id, start_date, end_date, dropoff_time, special_instructions, status,
-      total_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
+      total_cents, discount_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
       drivers_license_front_url, drivers_license_back_url,
       delivered_at, returned_at, created_at,
       customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
       equipment:equipment_id ( name, serial ),
-      booking_addons ( id, quantity, daily_rate_cents, addon:addon_id ( name ) )
+      booking_addons ( id, quantity, daily_rate_cents, addon:addon_id ( name ) ),
+      coupon:coupon_id ( code, discount_type, discount_value )
     `)
     .eq("id", id)
     .single();
@@ -195,6 +204,11 @@ export default async function BookingDetailPage({
           <div>
             <p className="text-sm text-muted">Total</p>
             <p className="font-display text-2xl font-semibold">{formatCents(booking.total_cents)}</p>
+            {booking.discount_cents > 0 && booking.coupon && (
+              <p className="mt-1 text-xs text-emerald-800">
+                <span className="font-mono">{booking.coupon.code}</span> applied — {formatCents(booking.discount_cents)} off
+              </p>
+            )}
           </div>
           <div>
             <p className="text-sm text-muted">Square payment ID</p>

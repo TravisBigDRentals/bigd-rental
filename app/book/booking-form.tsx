@@ -305,6 +305,16 @@ export function BookingForm({
   const [createAccount, setCreateAccount] = useState(false);
   const [accountPassword, setAccountPassword] = useState("");
   const [accountPasswordConfirm, setAccountPasswordConfirm] = useState("");
+  // Coupon state lives at the booking-form level so the pricing widget
+  // (rendered alongside Step 3) and the booking-create call both see the
+  // applied discount. `appliedCoupon` is what the server validated; the
+  // raw `couponCode` input is just what's in the textbox until Apply.
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<
+    { code: string; discount_type: "percent" | "amount"; discount_value: number } | null
+  >(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponValidating, setCouponValidating] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState<string>("");
   const [bookingId, setBookingId] = useState<string | null>(null);
   // Result flags from /api/bookings/create — surfaced on the confirmation
@@ -448,8 +458,47 @@ export function BookingForm({
         dailyRateCents: a.daily_rate_cents,
         quantity: 1,
       })),
+      discount: appliedCoupon
+        ? { type: appliedCoupon.discount_type, value: appliedCoupon.discount_value }
+        : null,
     });
-  }, [selectedEquipment, selectedAddons, startDate, endDate]);
+  }, [selectedEquipment, selectedAddons, startDate, endDate, appliedCoupon]);
+
+  async function applyCoupon() {
+    const trimmed = couponCode.trim();
+    if (!trimmed) return;
+    setCouponValidating(true);
+    setCouponError(null);
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: trimmed }),
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        setCouponError(json.error ?? "That code isn't valid.");
+        setAppliedCoupon(null);
+        return;
+      }
+      setAppliedCoupon({
+        code: json.code,
+        discount_type: json.discount_type,
+        discount_value: json.discount_value,
+      });
+      setCouponCode(json.code);
+    } catch {
+      setCouponError("Couldn't reach the server. Try again.");
+    } finally {
+      setCouponValidating(false);
+    }
+  }
+
+  function clearCoupon() {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponError(null);
+  }
 
   // `end_date` IS the pickup date in our data model — no +1.
   const pickupDateISO = endDate;
@@ -583,6 +632,7 @@ export function BookingForm({
             dropoff_time: dropoffTime,
             special_instructions: specialInstructions.trim() || null,
             addon_ids: addonIds,
+            coupon_code: appliedCoupon?.code ?? null,
           },
         }),
       });
@@ -697,6 +747,13 @@ export function BookingForm({
                 specialInstructions={specialInstructions}
                 setSpecialInstructions={setSpecialInstructions}
                 pricing={pricing}
+                couponCode={couponCode}
+                setCouponCode={setCouponCode}
+                appliedCoupon={appliedCoupon}
+                couponError={couponError}
+                couponValidating={couponValidating}
+                applyCoupon={applyCoupon}
+                clearCoupon={clearCoupon}
                 onBack={() => setStep(2)}
                 submitting={creatingBooking}
               />
@@ -708,6 +765,7 @@ export function BookingForm({
             startDate={startDate}
             endDate={endDate}
             selectedAddons={selectedAddons}
+            appliedCoupon={appliedCoupon}
             nextLabel={
               step === 1 ? "Next: your info →" :
               step === 2 ? "Next: review →" :
@@ -1287,12 +1345,21 @@ function StepReview(props: {
   specialInstructions: string;
   setSpecialInstructions: (s: string) => void;
   pricing: ReturnType<typeof calculatePricing>;
+  couponCode: string;
+  setCouponCode: (s: string) => void;
+  appliedCoupon: { code: string; discount_type: "percent" | "amount"; discount_value: number } | null;
+  couponError: string | null;
+  couponValidating: boolean;
+  applyCoupon: () => void;
+  clearCoupon: () => void;
   onBack: () => void;
   submitting: boolean;
 }) {
   const {
     equipment, startDate, endDate, pickupDate, dropoffTime, addons, customer,
     specialInstructions, setSpecialInstructions, pricing,
+    couponCode, setCouponCode, appliedCoupon, couponError, couponValidating,
+    applyCoupon, clearCoupon,
     onBack, submitting,
   } = props;
 
@@ -1379,6 +1446,46 @@ function StepReview(props: {
         </label>
       </div>
 
+      <div>
+        <h2 className="font-display text-lg font-semibold">Have a discount code?</h2>
+        {appliedCoupon ? (
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <span>
+              <strong className="font-mono">{appliedCoupon.code}</strong> applied —{" "}
+              {appliedCoupon.discount_type === "percent"
+                ? `${appliedCoupon.discount_value}% off`
+                : `${formatCents(appliedCoupon.discount_value)} off`}
+            </span>
+            <button type="button" onClick={clearCoupon} className="underline hover:no-underline">
+              Remove
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mt-2 flex items-stretch gap-2 max-w-sm">
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                placeholder="ENTER CODE"
+                className="flex-1 min-w-0 rounded-lg border border-ink/15 bg-paper px-3 py-2 font-mono uppercase tracking-wider"
+              />
+              <button
+                type="button"
+                onClick={applyCoupon}
+                disabled={couponValidating || !couponCode.trim()}
+                className="rounded-lg border border-ink/15 px-4 text-sm font-medium hover:bg-ink/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {couponValidating ? "…" : "Apply"}
+              </button>
+            </div>
+            {couponError && (
+              <p className="mt-2 text-xs text-red-700">{couponError}</p>
+            )}
+          </>
+        )}
+      </div>
+
       <div className="rounded-2xl border border-ink/10 bg-ink/[0.02] p-5 space-y-2">
         <div className="flex justify-between">
           <span className="text-sm">{equipment.name} × {pricing.days} day{pricing.days === 1 ? "" : "s"}</span>
@@ -1388,6 +1495,12 @@ function StepReview(props: {
           <div className="flex justify-between">
             <span className="text-sm">Attachments × {pricing.days} day{pricing.days === 1 ? "" : "s"}</span>
             <span className="font-mono">{formatCents(pricing.addonsCents)}</span>
+          </div>
+        )}
+        {pricing.discountCents > 0 && appliedCoupon && (
+          <div className="flex justify-between text-emerald-800">
+            <span className="text-sm">Discount ({appliedCoupon.code})</span>
+            <span className="font-mono">−{formatCents(pricing.discountCents)}</span>
           </div>
         )}
         <div className="border-t border-ink/10 pt-2 flex justify-between font-display text-xl font-semibold">

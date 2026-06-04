@@ -44,6 +44,7 @@ export const createBookingInput = z.object({
     dropoff_time: z.enum(["9:00 AM", "10:00 AM"]),
     special_instructions: z.string().nullable().optional(),
     addon_ids: z.array(z.string().uuid()).default([]),
+    coupon_code: z.string().max(60).nullable().optional(),
   }),
 });
 export type CreateBookingInput = z.infer<typeof createBookingInput>;

@@ -25,6 +25,9 @@ export default async function AdminLayout({
               <Link href="/admin/bookings" className="hover:text-accent transition-colors">
                 Bookings
               </Link>
+              <Link href="/admin/coupons" className="hover:text-accent transition-colors">
+                Coupons
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-4">

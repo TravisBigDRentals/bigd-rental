@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createBookingInput } from "@/lib/bookings/schema";
 import { calculatePricing } from "@/lib/pricing";
+import { validateCouponCode, type CouponRow } from "@/lib/coupons/validate";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -61,6 +62,21 @@ export async function POST(req: Request) {
     }
   }
 
+  // Coupon validation — re-checked server-side so the client total is
+  // never authoritative. If the user typed a code that's now expired or
+  // out of uses, return a clean error so the form can clear the field.
+  let coupon: CouponRow | null = null;
+  if (booking.coupon_code) {
+    const result = await validateCouponCode(booking.coupon_code);
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, code: "COUPON_INVALID" },
+        { status: 400 },
+      );
+    }
+    coupon = result.coupon;
+  }
+
   // Authoritative pricing on the server — never trust client-side totals
   const pricing = calculatePricing({
     startDate: booking.start_date,
@@ -71,6 +87,7 @@ export async function POST(req: Request) {
       dailyRateCents: a.daily_rate_cents,
       quantity: 1,
     })),
+    discount: coupon ? { type: coupon.discount_type, value: coupon.discount_value } : null,
   });
 
   // If anonymous + opted to save info, try to provision an auth user
@@ -203,6 +220,8 @@ export async function POST(req: Request) {
       special_instructions: booking.special_instructions ?? null,
       status: "pending_signature",
       total_cents: pricing.totalCents,
+      coupon_id: coupon?.id ?? null,
+      discount_cents: pricing.discountCents,
       drivers_license_front_url: customer.drivers_license_front_path,
       drivers_license_back_url: customer.drivers_license_back_path,
     })
