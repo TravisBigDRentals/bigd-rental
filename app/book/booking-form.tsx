@@ -992,7 +992,7 @@ function StepConfigure(props: {
         {equipmentId ? (
           <p className="mt-1 text-sm text-muted">
             Click two dates on the calendar to pick a range, or click <strong>Delivery date</strong> /{" "}
-            <strong>Pickup / Drop-off date</strong> first to control which one the next click sets. Greyed-out days are unavailable.
+            <strong>Pickup date</strong> first to control which one the next click sets. Greyed-out days are unavailable.
           </p>
         ) : (
           <p className="mt-1 text-sm text-muted">Pick a machine above to see availability.</p>
@@ -1033,7 +1033,7 @@ function StepConfigure(props: {
                   : "border-ink/15 bg-paper hover:border-ink/30"
               }`}
             >
-              <span className="block text-xs font-medium text-muted">Pickup / Drop-off date</span>
+              <span className="block text-xs font-medium text-muted">Pickup date</span>
               <span className="mt-1 block font-mono text-sm">
                 {endDate || <span className="text-muted">Click a day on the calendar →</span>}
               </span>
@@ -1049,8 +1049,18 @@ function StepConfigure(props: {
             </label>
           </div>
         </div>
-        {pickupDate && (
+        {startDate && (
           <div className="mt-4 rounded-lg border border-ink/15 bg-ink/[0.03] px-4 py-3 flex items-center gap-3">
+            <span className="text-lg" aria-hidden>📅</span>
+            <p className="text-sm">
+              <span className="text-muted">Equipment drop-off: </span>
+              <span className="font-medium">{formatLongDate(startDate)}</span>
+              <span className="text-muted"> at {dropoffTime}</span>
+            </p>
+          </div>
+        )}
+        {pickupDate && (
+          <div className="mt-3 rounded-lg border border-ink/15 bg-ink/[0.03] px-4 py-3 flex items-center gap-3">
             <span className="text-lg" aria-hidden>📅</span>
             <p className="text-sm">
               <span className="text-muted">Equipment pickup: </span>
@@ -1424,7 +1434,7 @@ function StepReview(props: {
         />
         <ReviewRow
           left={{ label: "Customer address", value: customerFullAddress }}
-          right={{ label: "Pickup / Drop-off date", value: formatLongDate(pickupDate) }}
+          right={{ label: "Pickup date", value: formatLongDate(pickupDate) }}
         />
         <ReviewRow
           left={{ label: "Project address", value: projectFullAddress }}
