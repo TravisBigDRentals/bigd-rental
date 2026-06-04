@@ -5,7 +5,7 @@ export type Equipment = {
   id: string;
   name: string;
   serial: string;
-  type: "excavator" | "skid_steer" | "attachment";
+  type: "excavator" | "skid_steer" | "attachment" | "plate_compactor";
   daily_rate_cents: number;
   weekly_rate_cents: number | null;
   monthly_rate_cents: number | null;
@@ -19,7 +19,7 @@ export type Addon = {
   id: string;
   name: string;
   daily_rate_cents: number;
-  compatible_equipment_type: "excavator" | "skid_steer" | "attachment";
+  compatible_equipment_type: "excavator" | "skid_steer" | "attachment" | "plate_compactor";
   image_url: string | null;
 };
 
