@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { customerSignInAction, customerSignUpAction } from "./actions";
+import { PasswordField } from "@/components/password-field";
 
 type Mode = "signin" | "signup";
 
@@ -50,15 +51,13 @@ export function CustomerAuthForm({ next, initialMode = "signin" }: { next: strin
         </label>
         <label className="block">
           <span className="block text-sm font-medium">Password</span>
-          <input
-            type="password"
+          <PasswordField
             name="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={setPassword}
             required
             autoComplete={mode === "signin" ? "current-password" : "new-password"}
             minLength={mode === "signup" ? 8 : undefined}
-            className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
           />
           {mode === "signup" && (
             <span className="mt-1 block text-xs text-muted">At least 8 characters.</span>
@@ -67,17 +66,14 @@ export function CustomerAuthForm({ next, initialMode = "signin" }: { next: strin
         {mode === "signup" && (
           <label className="block">
             <span className="block text-sm font-medium">Confirm password</span>
-            <input
-              type="password"
+            <PasswordField
               name="password_confirm"
               value={passwordConfirm}
-              onChange={(e) => setPasswordConfirm(e.target.value)}
+              onChange={setPasswordConfirm}
               required
               autoComplete="new-password"
               minLength={8}
-              className={`mt-1 w-full rounded-lg border bg-paper px-3 py-2 ${
-                confirmMismatch ? "border-red-400" : "border-ink/15"
-              }`}
+              className={confirmMismatch ? "border-red-400" : "border-ink/15"}
             />
             {confirmMismatch && (
               <span className="mt-1 block text-xs text-red-700">Passwords don&rsquo;t match.</span>

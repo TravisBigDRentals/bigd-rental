@@ -8,6 +8,7 @@ import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import type { Addon, Equipment } from "@/lib/bookings/queries";
 import { calculatePricing, formatCents } from "@/lib/pricing";
 import { DLDropZone } from "@/components/dl-drop-zone";
+import { PasswordField } from "@/components/password-field";
 import { publicEquipmentImageUrl } from "@/lib/equipment-images";
 import { PricingWidget, PricingMobileBar } from "./_components/pricing-widget";
 
@@ -1227,28 +1228,23 @@ function StepCustomer(props: {
           {createAccount && (
             <div className="mt-4 max-w-sm space-y-4">
               <Field label="Choose a password *">
-                <input
-                  type="password"
+                <PasswordField
                   value={accountPassword}
-                  onChange={(e) => setAccountPassword(e.target.value)}
+                  onChange={setAccountPassword}
                   minLength={8}
-                  autoComplete="new-password"
-                  className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
                 />
                 <span className="mt-1 block text-xs text-muted">At least 8 characters.</span>
               </Field>
               <Field label="Confirm password *">
-                <input
-                  type="password"
+                <PasswordField
                   value={accountPasswordConfirm}
-                  onChange={(e) => setAccountPasswordConfirm(e.target.value)}
+                  onChange={setAccountPasswordConfirm}
                   minLength={8}
-                  autoComplete="new-password"
-                  className={`mt-1 w-full rounded-lg border bg-paper px-3 py-2 ${
+                  className={
                     accountPasswordConfirm && accountPasswordConfirm !== accountPassword
                       ? "border-red-400"
                       : "border-ink/15"
-                  }`}
+                  }
                 />
                 {accountPasswordConfirm && accountPasswordConfirm !== accountPassword && (
                   <span className="mt-1 block text-xs text-red-700">Passwords don&rsquo;t match.</span>
