@@ -303,6 +303,7 @@ export function BookingForm({
   // to it. Hidden entirely for already-signed-in users.
   const [createAccount, setCreateAccount] = useState(false);
   const [accountPassword, setAccountPassword] = useState("");
+  const [accountPasswordConfirm, setAccountPasswordConfirm] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState<string>("");
   const [bookingId, setBookingId] = useState<string | null>(null);
   // Result flags from /api/bookings/create — surfaced on the confirmation
@@ -531,8 +532,13 @@ export function BookingForm({
     if (!customer.project_city.trim()) return setError("Project city is required");
     if (!customer.project_province.trim()) return setError("Project province is required");
     if (!customer.project_postal_code.trim()) return setError("Project postal code is required");
-    if (!isAuthenticated && createAccount && accountPassword.length < 8) {
-      return setError("Password must be at least 8 characters (or uncheck \"Save my info\")");
+    if (!isAuthenticated && createAccount) {
+      if (accountPassword.length < 8) {
+        return setError("Password must be at least 8 characters (or uncheck \"Save my info\")");
+      }
+      if (accountPassword !== accountPasswordConfirm) {
+        return setError("Passwords don't match — re-enter them in both fields");
+      }
     }
     setStep(3);
   }
@@ -676,6 +682,8 @@ export function BookingForm({
                 setCreateAccount={setCreateAccount}
                 accountPassword={accountPassword}
                 setAccountPassword={setAccountPassword}
+                accountPasswordConfirm={accountPasswordConfirm}
+                setAccountPasswordConfirm={setAccountPasswordConfirm}
                 onBack={() => setStep(1)}
               />
             )}
@@ -1018,6 +1026,8 @@ function StepCustomer(props: {
   setCreateAccount: (v: boolean) => void;
   accountPassword: string;
   setAccountPassword: (v: string) => void;
+  accountPasswordConfirm: string;
+  setAccountPasswordConfirm: (v: string) => void;
   onBack: () => void;
 }) {
   const {
@@ -1027,6 +1037,7 @@ function StepCustomer(props: {
     uploadingFront, uploadingBack,
     showSaveInfoOption, createAccount, setCreateAccount,
     accountPassword, setAccountPassword,
+    accountPasswordConfirm, setAccountPasswordConfirm,
     onBack,
   } = props;
 
@@ -1214,7 +1225,7 @@ function StepCustomer(props: {
             </span>
           </label>
           {createAccount && (
-            <div className="mt-4 max-w-sm">
+            <div className="mt-4 max-w-sm space-y-4">
               <Field label="Choose a password *">
                 <input
                   type="password"
@@ -1225,6 +1236,23 @@ function StepCustomer(props: {
                   className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
                 />
                 <span className="mt-1 block text-xs text-muted">At least 8 characters.</span>
+              </Field>
+              <Field label="Confirm password *">
+                <input
+                  type="password"
+                  value={accountPasswordConfirm}
+                  onChange={(e) => setAccountPasswordConfirm(e.target.value)}
+                  minLength={8}
+                  autoComplete="new-password"
+                  className={`mt-1 w-full rounded-lg border bg-paper px-3 py-2 ${
+                    accountPasswordConfirm && accountPasswordConfirm !== accountPassword
+                      ? "border-red-400"
+                      : "border-ink/15"
+                  }`}
+                />
+                {accountPasswordConfirm && accountPasswordConfirm !== accountPassword && (
+                  <span className="mt-1 block text-xs text-red-700">Passwords don&rsquo;t match.</span>
+                )}
               </Field>
             </div>
           )}

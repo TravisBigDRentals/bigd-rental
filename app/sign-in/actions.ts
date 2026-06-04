@@ -22,10 +22,12 @@ export async function customerSignInAction(_prev: Result, formData: FormData): P
 export async function customerSignUpAction(_prev: Result, formData: FormData): Promise<Result> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const passwordConfirm = String(formData.get("password_confirm") ?? "");
   const next = String(formData.get("next") ?? "/book");
 
   if (!email || !password) return { error: "Email and password are required" };
   if (password.length < 8) return { error: "Password must be at least 8 characters" };
+  if (password !== passwordConfirm) return { error: "Passwords don't match — re-enter them in both fields" };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({ email, password });

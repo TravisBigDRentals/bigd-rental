@@ -7,8 +7,11 @@ type Mode = "signin" | "signup";
 
 export function CustomerAuthForm({ next, initialMode = "signin" }: { next: string; initialMode?: Mode }) {
   const [mode, setMode] = useState<Mode>(initialMode);
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const action = mode === "signin" ? customerSignInAction : customerSignUpAction;
   const [state, formAction, pending] = useActionState(action, null);
+  const confirmMismatch = mode === "signup" && !!passwordConfirm && passwordConfirm !== password;
 
   return (
     <div>
@@ -50,6 +53,8 @@ export function CustomerAuthForm({ next, initialMode = "signin" }: { next: strin
           <input
             type="password"
             name="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete={mode === "signin" ? "current-password" : "new-password"}
             minLength={mode === "signup" ? 8 : undefined}
@@ -59,6 +64,26 @@ export function CustomerAuthForm({ next, initialMode = "signin" }: { next: strin
             <span className="mt-1 block text-xs text-muted">At least 8 characters.</span>
           )}
         </label>
+        {mode === "signup" && (
+          <label className="block">
+            <span className="block text-sm font-medium">Confirm password</span>
+            <input
+              type="password"
+              name="password_confirm"
+              value={passwordConfirm}
+              onChange={(e) => setPasswordConfirm(e.target.value)}
+              required
+              autoComplete="new-password"
+              minLength={8}
+              className={`mt-1 w-full rounded-lg border bg-paper px-3 py-2 ${
+                confirmMismatch ? "border-red-400" : "border-ink/15"
+              }`}
+            />
+            {confirmMismatch && (
+              <span className="mt-1 block text-xs text-red-700">Passwords don&rsquo;t match.</span>
+            )}
+          </label>
+        )}
         {state?.error && (
           <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
             {state.error}
@@ -66,7 +91,7 @@ export function CustomerAuthForm({ next, initialMode = "signin" }: { next: strin
         )}
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || confirmMismatch}
           className="w-full rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
         >
           {pending ? "…" : mode === "signin" ? "Sign in" : "Create account"}
