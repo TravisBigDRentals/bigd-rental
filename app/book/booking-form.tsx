@@ -1129,6 +1129,13 @@ function StepCustomer(props: {
     onBack,
   } = props;
 
+  // Email-blur lookup: when an anonymous booker types an email that
+  // already has a Supabase Auth account, surface a "sign in to pre-fill
+  // your info" nudge so they don't redo Step 2 by hand. Local state —
+  // resets if the user navigates away from Step 2 and back.
+  const [emailAccountExists, setEmailAccountExists] = useState<boolean | null>(null);
+  const [emailHintDismissed, setEmailHintDismissed] = useState(false);
+
   return (
     <section className="space-y-10">
       <div>
@@ -1153,10 +1160,49 @@ function StepCustomer(props: {
           </Field>
           <Field label={emailLocked ? "Email *  (account email, can't change here)" : "Email *"}>
             <input type="email" value={customer.email}
-              onChange={(e) => updateCustomer("email", e.target.value)}
+              onChange={(e) => {
+                updateCustomer("email", e.target.value);
+                // Any edit invalidates the previous lookup result and
+                // re-allows the nudge if it was dismissed.
+                setEmailAccountExists(null);
+                setEmailHintDismissed(false);
+              }}
+              onBlur={() => {
+                if (emailLocked) return;
+                const email = customer.email.trim().toLowerCase();
+                if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+                fetch("/api/auth/email-exists", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email }),
+                })
+                  .then((r) => r.json())
+                  .then((json) => setEmailAccountExists(!!json.exists))
+                  .catch(() => setEmailAccountExists(null));
+              }}
               readOnly={emailLocked}
               className={`mt-1 w-full rounded-lg border border-ink/15 px-3 py-2 ${emailLocked ? "bg-ink/[0.04] text-muted cursor-not-allowed" : "bg-paper"}`}
               required />
+            {!emailLocked && emailAccountExists === true && !emailHintDismissed && (
+              <div className="mt-2 flex items-start gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs">
+                <span className="mt-0.5">👋</span>
+                <div className="flex-1">
+                  We&rsquo;ve got an account for <strong>{customer.email}</strong>.{" "}
+                  <a href="/sign-in?next=/book" className="underline font-medium hover:text-accent">
+                    Sign in
+                  </a>{" "}
+                  to pre-fill your info and skip the DL re-upload.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEmailHintDismissed(true)}
+                  aria-label="Dismiss"
+                  className="text-muted hover:text-ink text-sm leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </Field>
           <Field label="Phone *">
             <input type="tel" value={customer.phone}
