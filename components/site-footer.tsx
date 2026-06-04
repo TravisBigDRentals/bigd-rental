@@ -49,7 +49,7 @@ export function SiteFooter() {
           />
         </div>
 
-        <nav className="md:text-right">
+        <nav>
           <p className="font-display tracking-[0.08em] text-sm text-paper/70 mb-4 md:mb-6">
             NAVIGATION
           </p>
