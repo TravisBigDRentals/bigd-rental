@@ -1055,7 +1055,7 @@ function StepConfigure(props: {
               const valueColor = filled ? "text-paper" : "text-ink/40";
               const surface = filled
                 ? "bg-ink"
-                : "bg-paper border border-ink/15 hover:border-ink/30";
+                : "bg-white border border-ink/15 hover:border-ink/30";
               return (
                 <label className={`block rounded-lg px-4 py-3 cursor-pointer transition-colors ${surface}`}>
                   <span className={`block font-display tracking-[0.12em] text-[10px] uppercase ${labelColor}`}>Drop-off time</span>
@@ -1169,7 +1169,7 @@ function DateSlotCard({
 }) {
   const surface = filled
     ? "bg-ink text-paper"
-    : "bg-paper border border-ink/15 text-ink hover:border-ink/30";
+    : "bg-white border border-ink/15 text-ink hover:border-ink/30";
   const labelColor = filled ? "text-accent" : "text-muted";
   const valueColor = isPlaceholder
     ? filled ? "text-paper/40" : "text-ink/40"
