@@ -48,6 +48,10 @@ export const createBookingInput = z.object({
     // Validated server-side against the equipment table and the
     // double-booking trigger.
     extra_equipment_id: z.string().uuid().nullable().optional(),
+    // Optional Liability Waiver flat $400 — boolean opt-in. Server
+    // stamps the cents amount onto the booking row from the canonical
+    // LIABILITY_WAIVER_CENTS constant; client just tells us yes/no.
+    liability_waiver: z.boolean().default(false),
     coupon_code: z.string().max(60).nullable().optional(),
   }),
 });

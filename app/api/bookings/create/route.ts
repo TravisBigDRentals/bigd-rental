@@ -125,6 +125,7 @@ export async function POST(req: Request) {
           monthlyRateCents: extraEquipment.monthly_rate_cents,
         }
       : null,
+    liabilityWaiverOptIn: booking.liability_waiver,
     discount: coupon ? { type: coupon.discount_type, value: coupon.discount_value } : null,
   });
 
@@ -259,6 +260,7 @@ export async function POST(req: Request) {
       status: "pending_signature",
       total_cents: pricing.totalCents,
       extra_equipment_id: extraEquipment?.id ?? null,
+      liability_waiver_cents: pricing.liabilityWaiverCents,
       coupon_id: coupon?.id ?? null,
       discount_cents: pricing.discountCents,
       drivers_license_front_url: customer.drivers_license_front_path,

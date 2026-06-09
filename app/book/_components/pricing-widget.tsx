@@ -1,7 +1,7 @@
 "use client";
 
 import type { Addon, Equipment } from "@/lib/bookings/queries";
-import { computeDiscountCents, formatCents, rentalDays, selectEquipmentTier, type Discount, type PricingTier } from "@/lib/pricing";
+import { computeDiscountCents, formatCents, rentalDays, selectEquipmentTier, LIABILITY_WAIVER_CENTS, type Discount, type PricingTier } from "@/lib/pricing";
 
 type PricingProps = {
   equipment: Equipment | null;
@@ -9,6 +9,7 @@ type PricingProps = {
   startDate: string;
   endDate: string;
   selectedAddons: Addon[];
+  liabilityWaiver?: boolean;
   appliedCoupon?: { code: string; discount_type: "percent" | "amount"; discount_value: number } | null;
   nextLabel: string;
   nextDisabled: boolean;
@@ -16,7 +17,7 @@ type PricingProps = {
   loading?: boolean;
 };
 
-function computeTotals({ equipment, extraEquipment, startDate, endDate, selectedAddons, appliedCoupon }: Pick<PricingProps, "equipment" | "extraEquipment" | "startDate" | "endDate" | "selectedAddons" | "appliedCoupon">) {
+function computeTotals({ equipment, extraEquipment, startDate, endDate, selectedAddons, liabilityWaiver, appliedCoupon }: Pick<PricingProps, "equipment" | "extraEquipment" | "startDate" | "endDate" | "selectedAddons" | "liabilityWaiver" | "appliedCoupon">) {
   const days = startDate && endDate ? rentalDays(startDate, endDate) : 0;
   const haveDates = days > 0;
 
@@ -56,11 +57,15 @@ function computeTotals({ equipment, extraEquipment, startDate, endDate, selected
     ? { type: appliedCoupon.discount_type, value: appliedCoupon.discount_value }
     : null;
   const discountCents = computeDiscountCents(subtotal, discount);
+  // Waiver is flat, not tied to days, and NOT discountable. Always
+  // shown if opted in (even before dates are picked).
+  const waiverCents = liabilityWaiver ? LIABILITY_WAIVER_CENTS : 0;
   return {
     days, haveDates, equipmentSubtotal, extraSubtotal, addonsSubtotal,
     tier, extraTier,
     discountCents,
-    total: Math.max(0, subtotal - discountCents),
+    waiverCents,
+    total: Math.max(0, subtotal - discountCents) + waiverCents,
   };
 }
 
@@ -78,7 +83,7 @@ function tierLabel(tier: PricingTier, equipment: { daily_rate_cents: number; wee
 // sees only one item per column and sticky context works correctly.
 export function PricingWidget(props: PricingProps) {
   const { equipment, extraEquipment, selectedAddons, appliedCoupon, nextLabel, nextDisabled, onNext, loading } = props;
-  const { days, haveDates, equipmentSubtotal, extraSubtotal, extraTier, tier, discountCents, total } = computeTotals(props);
+  const { days, haveDates, equipmentSubtotal, extraSubtotal, extraTier, tier, discountCents, waiverCents, total } = computeTotals(props);
 
   return (
     <aside className="hidden lg:block lg:sticky lg:top-24 self-start">
@@ -152,6 +157,16 @@ export function PricingWidget(props: PricingProps) {
               <span className="font-mono text-xs text-emerald-700">({appliedCoupon.code})</span>
             </span>
             <span className="font-mono whitespace-nowrap">−{formatCents(discountCents)}</span>
+          </div>
+        )}
+
+        {waiverCents > 0 && (
+          <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+            <span>
+              Liability waiver{" "}
+              <span className="font-mono text-xs text-muted">(flat)</span>
+            </span>
+            <span className="font-mono whitespace-nowrap font-semibold">{formatCents(waiverCents)}</span>
           </div>
         )}
 

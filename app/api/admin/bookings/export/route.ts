@@ -30,6 +30,7 @@ type BookingRow = {
   end_date: string;
   dropoff_time: string | null;
   total_cents: number;
+  liability_waiver_cents: number;
   payment_intent_id: string | null;
   paid_at: string | null;
   signature_completed_at: string | null;
@@ -81,7 +82,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("bookings")
     .select(`
-      id, status, start_date, end_date, dropoff_time, total_cents,
+      id, status, start_date, end_date, dropoff_time, total_cents, liability_waiver_cents,
       payment_intent_id, paid_at, signature_completed_at,
       delivered_at, returned_at, created_at,
       customer:customer_id (
@@ -118,6 +119,7 @@ export async function GET() {
     "Equipment subtotal (CAD)",
     "Extra equipment subtotal (CAD)",
     "Add-ons subtotal (CAD)",
+    "Liability waiver (CAD)",
     "Total (CAD)",
     "Total cents (raw)",
     "Square payment ID",
@@ -153,6 +155,7 @@ export async function GET() {
               }
             : null,
           addons: addons.map((a) => ({ addonId: "", dailyRateCents: a.daily_rate_cents, quantity: 1 })),
+          liabilityWaiverOptIn: raw.liability_waiver_cents > 0,
         })
       : null;
     const addonsCol = addons.length === 0
@@ -183,6 +186,7 @@ export async function GET() {
       pricing ? formatCents(pricing.equipmentCents) : "",
       pricing ? formatCents(pricing.extraEquipmentCents) : "",
       pricing ? formatCents(pricing.addonsCents) : "",
+      formatCents(raw.liability_waiver_cents),
       formatCents(raw.total_cents),
       raw.total_cents,
       raw.payment_intent_id ?? "",

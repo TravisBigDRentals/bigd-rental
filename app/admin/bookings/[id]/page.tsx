@@ -47,6 +47,7 @@ type BookingDetail = {
   status: string;
   total_cents: number;
   discount_cents: number;
+  liability_waiver_cents: number;
   payment_intent_id: string | null;
   paid_at: string | null;
   signed_agreement_pdf_url: string | null;
@@ -83,7 +84,7 @@ export default async function BookingDetailPage({
     .from("bookings")
     .select(`
       id, start_date, end_date, dropoff_time, special_instructions, status,
-      total_cents, discount_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
+      total_cents, discount_cents, liability_waiver_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
       drivers_license_front_url, drivers_license_back_url,
       delivered_at, returned_at, created_at,
       customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
@@ -217,6 +218,11 @@ export default async function BookingDetailPage({
             {booking.discount_cents > 0 && booking.coupon && (
               <p className="mt-1 text-xs text-emerald-800">
                 <span className="font-mono">{booking.coupon.code}</span> applied — {formatCents(booking.discount_cents)} off
+              </p>
+            )}
+            {booking.liability_waiver_cents > 0 && (
+              <p className="mt-1 text-xs text-muted">
+                Liability waiver applied — {formatCents(booking.liability_waiver_cents)} (flat, non-discountable)
               </p>
             )}
           </div>

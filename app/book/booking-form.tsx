@@ -6,7 +6,7 @@ import { DayPicker, type DateRange } from "react-day-picker";
 import "react-day-picker/style.css";
 import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import type { Addon, Equipment } from "@/lib/bookings/queries";
-import { calculatePricing, formatCents } from "@/lib/pricing";
+import { calculatePricing, formatCents, LIABILITY_WAIVER_CENTS } from "@/lib/pricing";
 import { DLDropZone } from "@/components/dl-drop-zone";
 import { PasswordField } from "@/components/password-field";
 import { publicEquipmentImageUrl } from "@/lib/equipment-images";
@@ -265,6 +265,8 @@ export function BookingForm({
   // Optional secondary machine (plate compactor today). Toggled by the
   // customer after they've picked a main machine.
   const [extraEquipmentId, setExtraEquipmentId] = useState<string>("");
+  // Optional Liability Waiver — flat $400, NOT discountable.
+  const [liabilityWaiver, setLiabilityWaiver] = useState<boolean>(false);
   // Empty default — customer must explicitly pick both dates. No silent
   // "today" prefill (was misleading + clashed with the new white/dark
   // empty/filled visual state).
@@ -502,11 +504,12 @@ export function BookingForm({
         dailyRateCents: a.daily_rate_cents,
         quantity: 1,
       })),
+      liabilityWaiverOptIn: liabilityWaiver,
       discount: appliedCoupon
         ? { type: appliedCoupon.discount_type, value: appliedCoupon.discount_value }
         : null,
     });
-  }, [selectedEquipment, selectedExtraEquipment, selectedAddons, startDate, endDate, appliedCoupon]);
+  }, [selectedEquipment, selectedExtraEquipment, selectedAddons, liabilityWaiver, startDate, endDate, appliedCoupon]);
 
   async function applyCoupon() {
     const trimmed = couponCode.trim();
@@ -678,6 +681,7 @@ export function BookingForm({
             special_instructions: specialInstructions.trim() || null,
             addon_ids: addonIds,
             extra_equipment_id: extraEquipmentId || null,
+            liability_waiver: liabilityWaiver,
             coupon_code: appliedCoupon?.code ?? null,
           },
         }),
@@ -757,6 +761,8 @@ export function BookingForm({
                 extraEquipmentList={extraEquipmentList}
                 extraEquipmentId={extraEquipmentId}
                 setExtraEquipmentId={setExtraEquipmentId}
+                liabilityWaiver={liabilityWaiver}
+                setLiabilityWaiver={setLiabilityWaiver}
                 startDate={startDate}
                 endDate={endDate}
                 pickupDate={pickupDateISO}
@@ -821,6 +827,7 @@ export function BookingForm({
             startDate={startDate}
             endDate={endDate}
             selectedAddons={selectedAddons}
+            liabilityWaiver={liabilityWaiver}
             appliedCoupon={appliedCoupon}
             nextLabel={
               step === 1 ? "Next: your info →" :
@@ -935,6 +942,8 @@ function StepConfigure(props: {
   extraEquipmentList: Equipment[];
   extraEquipmentId: string;
   setExtraEquipmentId: (id: string) => void;
+  liabilityWaiver: boolean;
+  setLiabilityWaiver: (v: boolean) => void;
   startDate: string;
   endDate: string;
   pickupDate: string;
@@ -953,6 +962,7 @@ function StepConfigure(props: {
   const {
     equipment, equipmentId, setEquipmentId,
     extraEquipmentList, extraEquipmentId, setExtraEquipmentId,
+    liabilityWaiver, setLiabilityWaiver,
     startDate, endDate, pickupDate,
     dropoffTime, setDropoffTime,
     compatibleAddons, addonIds, toggleAddon,
@@ -1098,6 +1108,46 @@ function StepConfigure(props: {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {equipmentId && (
+        <div>
+          <SectionTitle>Liability waiver</SectionTitle>
+          <p className="mt-3 text-sm text-muted">
+            Optional. Flat <span className="font-mono">{formatCents(LIABILITY_WAIVER_CENTS)}</span> — not eligible for discount codes.
+          </p>
+          <label
+            className={`mt-5 flex items-start gap-4 rounded-xl border p-5 cursor-pointer transition-colors ${
+              liabilityWaiver
+                ? "border-ink bg-ink text-paper"
+                : "border-ink/15 bg-white hover:border-ink/30 text-ink"
+            }`}
+          >
+            <span className={`mt-1 relative inline-flex h-5 w-5 items-center justify-center rounded-full border shrink-0 ${
+              liabilityWaiver ? "border-accent" : "border-ink/30"
+            }`}>
+              {liabilityWaiver && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
+              <input
+                type="checkbox"
+                checked={liabilityWaiver}
+                onChange={(e) => setLiabilityWaiver(e.target.checked)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="font-display text-lg tracking-wide uppercase">Add liability waiver</p>
+                <p className="font-mono text-sm whitespace-nowrap">
+                  <span className="font-semibold">{formatCents(LIABILITY_WAIVER_CENTS)}</span>
+                  <span className={liabilityWaiver ? "text-paper/70" : "text-muted"}> flat</span>
+                </p>
+              </div>
+              <p className={`mt-2 text-sm leading-relaxed ${liabilityWaiver ? "text-paper/85" : "text-ink/75"}`}>
+                If anything breaks during your rental, we cover the repair cost. Without this, you&rsquo;re on the hook up to the equipment&rsquo;s insured value.
+              </p>
+            </div>
+          </label>
         </div>
       )}
 
@@ -1765,6 +1815,12 @@ function StepReview(props: {
           <div className="flex justify-between text-emerald-800">
             <span className="text-sm">Discount ({appliedCoupon.code})</span>
             <span className="font-mono">−{formatCents(pricing.discountCents)}</span>
+          </div>
+        )}
+        {pricing.liabilityWaiverCents > 0 && (
+          <div className="flex justify-between">
+            <span className="text-sm">Liability waiver (flat)</span>
+            <span className="font-mono">{formatCents(pricing.liabilityWaiverCents)}</span>
           </div>
         )}
         <div className="border-t border-ink/10 pt-2 flex justify-between font-display text-xl font-semibold">

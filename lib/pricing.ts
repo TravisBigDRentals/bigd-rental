@@ -6,6 +6,13 @@ export type AddonSelection = {
   quantity: number;
 };
 
+// Optional liability waiver — flat fee, NOT discountable. If the
+// customer opts in we add this AFTER the discount is applied, so a
+// 100%-off coupon on a $1000 rental still owes the $400 waiver.
+// Snapshotted on each booking at the moment of submission so future
+// price changes don't rewrite past totals.
+export const LIABILITY_WAIVER_CENTS = 40000;
+
 export type Discount =
   | { type: "percent"; value: number }   // 1-100
   | { type: "amount"; value: number };   // cents off
@@ -29,6 +36,7 @@ export type PricingInput = {
   // Priced the same way as the main equipment — tiered by rental days.
   extraEquipment?: ExtraEquipmentInput | null;
   addons: AddonSelection[];
+  liabilityWaiverOptIn?: boolean;
   discount?: Discount | null;
 };
 
@@ -42,8 +50,11 @@ export type PricingBreakdown = {
   extraEquipmentCents: number;
   extraEquipmentTier: PricingTier | null; // null when no extra picked
   addonsCents: number;
+  // subtotalCents = equipment + extra + addons. This is what the
+  // discount applies to. The waiver sits outside it.
   subtotalCents: number;
   discountCents: number;
+  liabilityWaiverCents: number;  // 0 or LIABILITY_WAIVER_CENTS
   totalCents: number;
 };
 
@@ -116,6 +127,7 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
 
   const subtotalCents = equipmentCents + extraEquipmentCents + addonsCents;
   const discountCents = computeDiscountCents(subtotalCents, input.discount);
+  const liabilityWaiverCents = input.liabilityWaiverOptIn ? LIABILITY_WAIVER_CENTS : 0;
 
   return {
     days,
@@ -127,7 +139,10 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
     addonsCents,
     subtotalCents,
     discountCents,
-    totalCents: Math.max(0, subtotalCents - discountCents),
+    liabilityWaiverCents,
+    // Discount applies to subtotal only — waiver is added after,
+    // never discounted away.
+    totalCents: Math.max(0, subtotalCents - discountCents) + liabilityWaiverCents,
   };
 }
 
