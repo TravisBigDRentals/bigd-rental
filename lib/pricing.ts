@@ -10,6 +10,12 @@ export type Discount =
   | { type: "percent"; value: number }   // 1-100
   | { type: "amount"; value: number };   // cents off
 
+export type ExtraEquipmentInput = {
+  dailyRateCents: number;
+  weeklyRateCents?: number | null;
+  monthlyRateCents?: number | null;
+};
+
 export type PricingInput = {
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD
@@ -19,6 +25,9 @@ export type PricingInput = {
   // tiered-rates migration).
   equipmentWeeklyRateCents?: number | null;
   equipmentMonthlyRateCents?: number | null;
+  // Optional secondary machine (currently only the TMG Plate Compactor).
+  // Priced the same way as the main equipment — tiered by rental days.
+  extraEquipment?: ExtraEquipmentInput | null;
   addons: AddonSelection[];
   discount?: Discount | null;
 };
@@ -30,6 +39,8 @@ export type PricingBreakdown = {
   equipmentCents: number;
   equipmentTier: PricingTier;
   equipmentEffectiveDailyCents: number;  // per-day rate at the tier
+  extraEquipmentCents: number;
+  extraEquipmentTier: PricingTier | null; // null when no extra picked
   addonsCents: number;
   subtotalCents: number;
   discountCents: number;
@@ -82,12 +93,28 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
   // whole cents.
   const equipmentCents = Math.round(effectiveDailyCents * days);
 
+  // Extra machine (plate compactor) uses the same tiered pricing logic
+  // as the main equipment. It does NOT take the "first addon free"
+  // slot — that's reserved for attachments only.
+  let extraEquipmentCents = 0;
+  let extraEquipmentTier: PricingTier | null = null;
+  if (input.extraEquipment) {
+    const xt = selectEquipmentTier(
+      days,
+      input.extraEquipment.dailyRateCents,
+      input.extraEquipment.weeklyRateCents,
+      input.extraEquipment.monthlyRateCents,
+    );
+    extraEquipmentTier = xt.tier;
+    extraEquipmentCents = Math.round(xt.effectiveDailyCents * days);
+  }
+
   const addonsCents = input.addons.reduce((sum, addon, i) => {
     if (i === 0) return sum; // first addon is free
     return sum + addon.dailyRateCents * days * addon.quantity;
   }, 0);
 
-  const subtotalCents = equipmentCents + addonsCents;
+  const subtotalCents = equipmentCents + extraEquipmentCents + addonsCents;
   const discountCents = computeDiscountCents(subtotalCents, input.discount);
 
   return {
@@ -95,6 +122,8 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
     equipmentCents,
     equipmentTier: tier,
     equipmentEffectiveDailyCents: effectiveDailyCents,
+    extraEquipmentCents,
+    extraEquipmentTier,
     addonsCents,
     subtotalCents,
     discountCents,

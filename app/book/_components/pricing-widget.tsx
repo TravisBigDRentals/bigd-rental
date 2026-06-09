@@ -5,6 +5,7 @@ import { computeDiscountCents, formatCents, rentalDays, selectEquipmentTier, typ
 
 type PricingProps = {
   equipment: Equipment | null;
+  extraEquipment?: Equipment | null;
   startDate: string;
   endDate: string;
   selectedAddons: Addon[];
@@ -15,7 +16,7 @@ type PricingProps = {
   loading?: boolean;
 };
 
-function computeTotals({ equipment, startDate, endDate, selectedAddons, appliedCoupon }: Pick<PricingProps, "equipment" | "startDate" | "endDate" | "selectedAddons" | "appliedCoupon">) {
+function computeTotals({ equipment, extraEquipment, startDate, endDate, selectedAddons, appliedCoupon }: Pick<PricingProps, "equipment" | "extraEquipment" | "startDate" | "endDate" | "selectedAddons" | "appliedCoupon">) {
   const days = startDate && endDate ? rentalDays(startDate, endDate) : 0;
   const haveDates = days > 0;
 
@@ -32,19 +33,32 @@ function computeTotals({ equipment, startDate, endDate, selectedAddons, appliedC
     equipmentSubtotal = Math.round(sel.effectiveDailyCents * days);
   }
 
+  let extraSubtotal = 0;
+  let extraTier: PricingTier = "daily";
+  if (extraEquipment && haveDates) {
+    const xt = selectEquipmentTier(
+      days,
+      extraEquipment.daily_rate_cents,
+      extraEquipment.weekly_rate_cents,
+      extraEquipment.monthly_rate_cents,
+    );
+    extraTier = xt.tier;
+    extraSubtotal = Math.round(xt.effectiveDailyCents * days);
+  }
+
   const addonsSubtotal = selectedAddons.reduce((sum, a, i) => {
     if (!haveDates) return sum;
     if (i === 0) return sum;
     return sum + a.daily_rate_cents * days;
   }, 0);
-  const subtotal = equipmentSubtotal + addonsSubtotal;
+  const subtotal = equipmentSubtotal + extraSubtotal + addonsSubtotal;
   const discount: Discount | null = appliedCoupon
     ? { type: appliedCoupon.discount_type, value: appliedCoupon.discount_value }
     : null;
   const discountCents = computeDiscountCents(subtotal, discount);
   return {
-    days, haveDates, equipmentSubtotal, addonsSubtotal,
-    tier,
+    days, haveDates, equipmentSubtotal, extraSubtotal, addonsSubtotal,
+    tier, extraTier,
     discountCents,
     total: Math.max(0, subtotal - discountCents),
   };
@@ -63,8 +77,8 @@ function tierLabel(tier: PricingTier, equipment: { daily_rate_cents: number; wee
 // Desktop: sticky sidebar. Single grid child so the parent CSS Grid
 // sees only one item per column and sticky context works correctly.
 export function PricingWidget(props: PricingProps) {
-  const { equipment, selectedAddons, appliedCoupon, nextLabel, nextDisabled, onNext, loading } = props;
-  const { days, haveDates, equipmentSubtotal, tier, discountCents, total } = computeTotals(props);
+  const { equipment, extraEquipment, selectedAddons, appliedCoupon, nextLabel, nextDisabled, onNext, loading } = props;
+  const { days, haveDates, equipmentSubtotal, extraSubtotal, extraTier, tier, discountCents, total } = computeTotals(props);
 
   return (
     <aside className="hidden lg:block lg:sticky lg:top-24 self-start">
@@ -93,6 +107,22 @@ export function PricingWidget(props: PricingProps) {
           ) : (
             <li className="rounded-lg bg-paper border border-ink/10 px-4 py-6 text-center font-display tracking-wide uppercase text-sm text-ink/40">
               Pick a machine
+            </li>
+          )}
+
+          {extraEquipment && (
+            <li className="rounded-lg bg-paper border border-ink/10 px-4 py-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-display tracking-wide uppercase text-sm truncate">{extraEquipment.name}</p>
+                <p className="mt-0.5 font-mono text-[11px] text-muted">
+                  {haveDates
+                    ? tierLabel(extraTier, extraEquipment, days)
+                    : `${formatCents(extraEquipment.daily_rate_cents)}/day`}
+                </p>
+              </div>
+              <span className="font-mono text-sm font-semibold whitespace-nowrap">
+                {haveDates ? formatCents(extraSubtotal) : "—"}
+              </span>
             </li>
           )}
 

@@ -33,10 +33,12 @@ export async function POST(req: Request) {
   const bufferedStart = isoDate(addDays(parseISO(start_date), -1));
 
   const supabase = createSupabaseServiceClient();
+  // Block dates where the requested equipment is taken in *either* slot
+  // (main equipment_id OR the extra_equipment_id added in migration 0015).
   const { data, error } = await supabase
     .from("bookings")
-    .select("id, start_date, end_date, status")
-    .eq("equipment_id", equipment_id)
+    .select("id, start_date, end_date, status, equipment_id, extra_equipment_id")
+    .or(`equipment_id.eq.${equipment_id},extra_equipment_id.eq.${equipment_id}`)
     .neq("status", "canceled")
     .lte("start_date", bufferedEnd)
     .gte("end_date", bufferedStart);

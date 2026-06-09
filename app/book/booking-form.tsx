@@ -262,6 +262,9 @@ export function BookingForm({
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [equipmentId, setEquipmentId] = useState<string>("");
+  // Optional secondary machine (plate compactor today). Toggled by the
+  // customer after they've picked a main machine.
+  const [extraEquipmentId, setExtraEquipmentId] = useState<string>("");
   // Empty default — customer must explicitly pick both dates. No silent
   // "today" prefill (was misleading + clashed with the new white/dark
   // empty/filled visual state).
@@ -429,9 +432,27 @@ export function BookingForm({
     ) ?? null;
   }, [startDate, endDate, blockedRanges]);
 
+  // Main machines and "extra" machines (currently just the plate compactor)
+  // come from the same equipment table but split for UX: extras are
+  // optional, only valid alongside a main pick, and don't show in the
+  // primary "Pick a machine" list.
+  const mainEquipment = useMemo(
+    () => equipment.filter((e) => e.type !== "plate_compactor"),
+    [equipment],
+  );
+  const extraEquipmentList = useMemo(
+    () => equipment.filter((e) => e.type === "plate_compactor"),
+    [equipment],
+  );
+
   const selectedEquipment = useMemo(
-    () => equipment.find((e) => e.id === equipmentId) ?? null,
-    [equipment, equipmentId],
+    () => mainEquipment.find((e) => e.id === equipmentId) ?? null,
+    [mainEquipment, equipmentId],
+  );
+
+  const selectedExtraEquipment = useMemo(
+    () => extraEquipmentList.find((e) => e.id === extraEquipmentId) ?? null,
+    [extraEquipmentList, extraEquipmentId],
   );
 
   const compatibleAddons = useMemo(
@@ -469,6 +490,13 @@ export function BookingForm({
       equipmentDailyRateCents: selectedEquipment.daily_rate_cents,
       equipmentWeeklyRateCents: selectedEquipment.weekly_rate_cents,
       equipmentMonthlyRateCents: selectedEquipment.monthly_rate_cents,
+      extraEquipment: selectedExtraEquipment
+        ? {
+            dailyRateCents: selectedExtraEquipment.daily_rate_cents,
+            weeklyRateCents: selectedExtraEquipment.weekly_rate_cents,
+            monthlyRateCents: selectedExtraEquipment.monthly_rate_cents,
+          }
+        : null,
       addons: selectedAddons.map((a) => ({
         addonId: a.id,
         dailyRateCents: a.daily_rate_cents,
@@ -478,7 +506,7 @@ export function BookingForm({
         ? { type: appliedCoupon.discount_type, value: appliedCoupon.discount_value }
         : null,
     });
-  }, [selectedEquipment, selectedAddons, startDate, endDate, appliedCoupon]);
+  }, [selectedEquipment, selectedExtraEquipment, selectedAddons, startDate, endDate, appliedCoupon]);
 
   async function applyCoupon() {
     const trimmed = couponCode.trim();
@@ -649,6 +677,7 @@ export function BookingForm({
             dropoff_time: dropoffTime,
             special_instructions: specialInstructions.trim() || null,
             addon_ids: addonIds,
+            extra_equipment_id: extraEquipmentId || null,
             coupon_code: appliedCoupon?.code ?? null,
           },
         }),
@@ -722,9 +751,12 @@ export function BookingForm({
           <div className="min-w-0">
             {step === 1 && (
               <StepConfigure
-                equipment={equipment}
+                equipment={mainEquipment}
                 equipmentId={equipmentId}
                 setEquipmentId={(id) => { setEquipmentId(id); setAddonIds([]); }}
+                extraEquipmentList={extraEquipmentList}
+                extraEquipmentId={extraEquipmentId}
+                setExtraEquipmentId={setExtraEquipmentId}
                 startDate={startDate}
                 endDate={endDate}
                 pickupDate={pickupDateISO}
@@ -785,6 +817,7 @@ export function BookingForm({
           {/* Desktop sticky sidebar */}
           <PricingWidget
             equipment={selectedEquipment}
+            extraEquipment={selectedExtraEquipment}
             startDate={startDate}
             endDate={endDate}
             selectedAddons={selectedAddons}
@@ -899,6 +932,9 @@ function StepConfigure(props: {
   equipment: Equipment[];
   equipmentId: string;
   setEquipmentId: (id: string) => void;
+  extraEquipmentList: Equipment[];
+  extraEquipmentId: string;
+  setExtraEquipmentId: (id: string) => void;
   startDate: string;
   endDate: string;
   pickupDate: string;
@@ -916,6 +952,7 @@ function StepConfigure(props: {
 }) {
   const {
     equipment, equipmentId, setEquipmentId,
+    extraEquipmentList, extraEquipmentId, setExtraEquipmentId,
     startDate, endDate, pickupDate,
     dropoffTime, setDropoffTime,
     compatibleAddons, addonIds, toggleAddon,
@@ -975,6 +1012,55 @@ function StepConfigure(props: {
           </div>
         </div>
       </div>
+
+      {equipmentId && extraEquipmentList.length > 0 && (
+        <div>
+          <SectionTitle>Add a compactor</SectionTitle>
+          <p className="mt-3 text-sm text-muted">
+            Optional. Rent the compactor alongside your main machine — same dates, same delivery trip.
+          </p>
+          <div className="mt-5 space-y-4">
+            {extraEquipmentList.map((eq) => {
+              const selected = extraEquipmentId === eq.id;
+              return (
+                <button
+                  key={eq.id}
+                  type="button"
+                  onClick={() => setExtraEquipmentId(selected ? "" : eq.id)}
+                  aria-pressed={selected}
+                  className={`w-full text-left rounded-xl border transition-all ${
+                    selected
+                      ? "bg-ink text-paper border-ink"
+                      : "bg-white border-ink/15 hover:border-ink/30 text-ink"
+                  }`}
+                >
+                  <div className="p-5 pb-4 flex items-start gap-4">
+                    <span className={`mt-1 relative inline-flex h-5 w-5 items-center justify-center rounded-full border shrink-0 ${
+                      selected ? "border-accent" : "border-ink/30"
+                    }`}>
+                      {selected && <span className="h-2.5 w-2.5 rounded-full bg-accent" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-display text-xl tracking-wide uppercase">{eq.name}</p>
+                      <p className={`mt-1 font-mono text-xs ${selected ? "text-paper/60" : "text-muted"}`}>{eq.serial}</p>
+                      {eq.description && (
+                        <p className={`mt-3 text-sm leading-relaxed ${selected ? "text-paper/85" : "text-ink/75"}`}>{eq.description}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className={`border-t grid grid-cols-3 divide-x ${
+                    selected ? "border-paper/15 divide-paper/15" : "border-ink/10 divide-ink/10"
+                  }`}>
+                    <RateCell label="Daily rate" cents={eq.daily_rate_cents} />
+                    <RateCell label="Weekly rate" cents={eq.weekly_rate_cents} />
+                    <RateCell label="Monthly rate" cents={eq.monthly_rate_cents} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {equipmentId && compatibleAddons.length > 0 && (
         <div>

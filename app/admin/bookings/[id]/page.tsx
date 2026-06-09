@@ -58,6 +58,7 @@ type BookingDetail = {
   customer: Customer | null;
   equipment: Equipment | null;
   booking_addons: AddonRow[] | null;
+  extra_equipment: Equipment | null;
   coupon: Coupon | null;
 };
 
@@ -87,6 +88,7 @@ export default async function BookingDetailPage({
       delivered_at, returned_at, created_at,
       customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
       equipment:equipment_id ( name, serial ),
+      extra_equipment:extra_equipment_id ( name, serial ),
       booking_addons ( id, quantity, daily_rate_cents, addon:addon_id ( name ) ),
       coupon:coupon_id ( code, discount_type, discount_value )
     `)
@@ -108,6 +110,7 @@ export default async function BookingDetailPage({
 
   const customer = booking.customer;
   const equipment = booking.equipment;
+  const extraEquipment = booking.extra_equipment;
   const addons = booking.booking_addons ?? [];
 
   return (
@@ -134,6 +137,13 @@ export default async function BookingDetailPage({
         <DetailCard title="Equipment">
           <p className="font-medium">{equipment?.name}</p>
           <p className="font-mono text-xs text-muted">{equipment?.serial}</p>
+          {extraEquipment && (
+            <div className="mt-3 pt-3 border-t border-ink/10">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted">+ Extra machine</p>
+              <p className="mt-1 font-medium">{extraEquipment.name}</p>
+              <p className="font-mono text-xs text-muted">{extraEquipment.serial}</p>
+            </div>
+          )}
         </DetailCard>
         <DetailCard title="Dates">
           <p className="font-mono text-sm">{booking.start_date} → {booking.end_date}</p>

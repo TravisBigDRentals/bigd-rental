@@ -38,6 +38,7 @@ type BookingRow = {
   created_at: string;
   customer: Customer | Customer[] | null;
   equipment: Equipment | Equipment[] | null;
+  extra_equipment: Equipment | Equipment[] | null;
   booking_addons: { addon: Addon | Addon[] | null }[] | null;
 };
 
@@ -89,6 +90,7 @@ export async function GET() {
         project_address_line1, project_address_line2, project_city, project_province, project_postal_code
       ),
       equipment:equipment_id ( name, serial, daily_rate_cents, weekly_rate_cents, monthly_rate_cents ),
+      extra_equipment:extra_equipment_id ( name, serial, daily_rate_cents, weekly_rate_cents, monthly_rate_cents ),
       booking_addons ( addon:addon_id ( name, daily_rate_cents ) )
     `)
     .order("created_at", { ascending: false });
@@ -105,6 +107,8 @@ export async function GET() {
     "Phone",
     "Equipment",
     "Equipment serial",
+    "Extra equipment",
+    "Extra equipment serial",
     "Daily rate (CAD)",
     "Delivery date",
     "Pickup date",
@@ -112,6 +116,7 @@ export async function GET() {
     "Drop-off time",
     "Add-ons",
     "Equipment subtotal (CAD)",
+    "Extra equipment subtotal (CAD)",
     "Add-ons subtotal (CAD)",
     "Total (CAD)",
     "Total cents (raw)",
@@ -128,6 +133,7 @@ export async function GET() {
   for (const raw of (data as unknown as BookingRow[]) ?? []) {
     const customer = unwrap(raw.customer);
     const equipment = unwrap(raw.equipment);
+    const extraEquipment = unwrap(raw.extra_equipment);
     const addons: Addon[] = (raw.booking_addons ?? [])
       .map((ba) => unwrap(ba.addon))
       .filter((a): a is Addon => !!a);
@@ -139,6 +145,13 @@ export async function GET() {
           equipmentDailyRateCents: equipment.daily_rate_cents,
           equipmentWeeklyRateCents: equipment.weekly_rate_cents,
           equipmentMonthlyRateCents: equipment.monthly_rate_cents,
+          extraEquipment: extraEquipment
+            ? {
+                dailyRateCents: extraEquipment.daily_rate_cents,
+                weeklyRateCents: extraEquipment.weekly_rate_cents,
+                monthlyRateCents: extraEquipment.monthly_rate_cents,
+              }
+            : null,
           addons: addons.map((a) => ({ addonId: "", dailyRateCents: a.daily_rate_cents, quantity: 1 })),
         })
       : null;
@@ -159,6 +172,8 @@ export async function GET() {
       customer?.phone,
       equipment?.name,
       equipment?.serial,
+      extraEquipment?.name ?? "",
+      extraEquipment?.serial ?? "",
       equipment ? formatCents(equipment.daily_rate_cents) : "",
       raw.start_date,
       raw.end_date,
@@ -166,6 +181,7 @@ export async function GET() {
       raw.dropoff_time ?? "",
       addonsCol,
       pricing ? formatCents(pricing.equipmentCents) : "",
+      pricing ? formatCents(pricing.extraEquipmentCents) : "",
       pricing ? formatCents(pricing.addonsCents) : "",
       formatCents(raw.total_cents),
       raw.total_cents,

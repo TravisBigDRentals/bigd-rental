@@ -44,6 +44,10 @@ export const createBookingInput = z.object({
     dropoff_time: z.enum(["8:00 AM", "10:00 AM"]),
     special_instructions: z.string().nullable().optional(),
     addon_ids: z.array(z.string().uuid()).default([]),
+    // Optional secondary machine (currently only the plate compactor).
+    // Validated server-side against the equipment table and the
+    // double-booking trigger.
+    extra_equipment_id: z.string().uuid().nullable().optional(),
     coupon_code: z.string().max(60).nullable().optional(),
   }),
 });

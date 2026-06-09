@@ -62,6 +62,35 @@ export async function POST(req: Request) {
     }
   }
 
+  // Optional secondary machine (plate compactor today; future-extensible).
+  // Validated against the equipment table; pricing uses its own tier rates.
+  let extraEquipment: {
+    id: string;
+    daily_rate_cents: number;
+    weekly_rate_cents: number | null;
+    monthly_rate_cents: number | null;
+  } | null = null;
+  if (booking.extra_equipment_id) {
+    if (booking.extra_equipment_id === booking.equipment_id) {
+      return NextResponse.json(
+        { error: "Extra equipment can't be the same as the main machine" },
+        { status: 400 },
+      );
+    }
+    const { data: extra, error: extraErr } = await supabase
+      .from("equipment")
+      .select("id, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, available_for_booking")
+      .eq("id", booking.extra_equipment_id)
+      .single();
+    if (extraErr || !extra) {
+      return NextResponse.json({ error: "Extra equipment not found" }, { status: 404 });
+    }
+    if (!extra.available_for_booking) {
+      return NextResponse.json({ error: "Extra equipment not available" }, { status: 400 });
+    }
+    extraEquipment = extra;
+  }
+
   // Coupon validation — re-checked server-side so the client total is
   // never authoritative. If the user typed a code that's now expired or
   // out of uses, return a clean error so the form can clear the field.
@@ -89,6 +118,13 @@ export async function POST(req: Request) {
       dailyRateCents: a.daily_rate_cents,
       quantity: 1,
     })),
+    extraEquipment: extraEquipment
+      ? {
+          dailyRateCents: extraEquipment.daily_rate_cents,
+          weeklyRateCents: extraEquipment.weekly_rate_cents,
+          monthlyRateCents: extraEquipment.monthly_rate_cents,
+        }
+      : null,
     discount: coupon ? { type: coupon.discount_type, value: coupon.discount_value } : null,
   });
 
@@ -222,6 +258,7 @@ export async function POST(req: Request) {
       special_instructions: booking.special_instructions ?? null,
       status: "pending_signature",
       total_cents: pricing.totalCents,
+      extra_equipment_id: extraEquipment?.id ?? null,
       coupon_id: coupon?.id ?? null,
       discount_cents: pricing.discountCents,
       drivers_license_front_url: customer.drivers_license_front_path,
