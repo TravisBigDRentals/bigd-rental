@@ -9,7 +9,7 @@ export const metadata = {
   title: "Book Equipment — Big D's Rental Co.",
 };
 
-type DropoffTime = "9:00 AM" | "10:00 AM";
+type DropoffTime = "8:00 AM" | "10:00 AM";
 
 // Prefill data carried over from a prior booking when the customer
 // clicks "Add another machine for these dates" on the confirmation
@@ -69,7 +69,7 @@ async function loadPrefill(bookingId: string): Promise<PrefillBundle | null> {
   const dlFront = data.drivers_license_front_url ?? c.drivers_license_front_url ?? "";
   const dlBack = data.drivers_license_back_url ?? c.drivers_license_back_url ?? "";
 
-  const dropoff: DropoffTime = data.dropoff_time === "10:00 AM" ? "10:00 AM" : "9:00 AM";
+  const dropoff: DropoffTime = data.dropoff_time === "10:00 AM" ? "10:00 AM" : "8:00 AM";
 
   return {
     customer: {

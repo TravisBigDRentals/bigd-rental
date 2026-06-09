@@ -41,7 +41,7 @@ export const createBookingInput = z.object({
     equipment_id: z.string().uuid(),
     start_date: dateString,
     end_date: dateString,
-    dropoff_time: z.enum(["9:00 AM", "10:00 AM"]),
+    dropoff_time: z.enum(["8:00 AM", "10:00 AM"]),
     special_instructions: z.string().nullable().optional(),
     addon_ids: z.array(z.string().uuid()).default([]),
     coupon_code: z.string().max(60).nullable().optional(),

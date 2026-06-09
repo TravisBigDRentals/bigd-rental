@@ -25,7 +25,7 @@ function isoToDate(iso: string): Date {
 }
 
 type Step = 1 | 2 | 3 | 4 | 5;
-type DropoffTime = "9:00 AM" | "10:00 AM";
+type DropoffTime = "8:00 AM" | "10:00 AM";
 
 type CustomerState = {
   first_name: string;
@@ -1067,7 +1067,7 @@ function StepConfigure(props: {
                       onChange={(e) => setDropoffTime(e.target.value as DropoffTime | "")}
                       className={`w-full bg-transparent text-base focus:outline-none cursor-pointer appearance-none pr-7 ${valueColor}`}>
                       <option value="" disabled className="text-ink">Select a time</option>
-                      <option className="text-ink">9:00 AM</option>
+                      <option className="text-ink">8:00 AM</option>
                       <option className="text-ink">10:00 AM</option>
                     </select>
                     <svg
