@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { getSquareClient, squareLocationId } from "@/lib/square/server";
 import { sendBookingConfirmationEmailIfReady } from "@/lib/email/booking-confirmation";
+import { findBlockingBookings } from "@/lib/bookings/availability";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
     .from("bookings")
     .select(`
       id, total_cents, status, payment_intent_id,
+      equipment_id, extra_equipment_id, start_date, end_date,
       customer:customer_id ( email )
     `)
     .eq("id", booking_id)
@@ -46,6 +48,41 @@ export async function POST(req: Request) {
       { error: `Cannot charge a booking in status '${booking.status}'` },
       { status: 409 },
     );
+  }
+
+  // Pre-flight availability — block the charge if another customer
+  // already paid (or is still inside their 15-min hold) for the same
+  // dates while this booking sat in pending_payment. The DB trigger is
+  // the final defense, but checking here means we never pull money for
+  // a slot we can't actually deliver.
+  try {
+    const blockers = await findBlockingBookings({
+      equipmentId: booking.equipment_id,
+      startDate: booking.start_date,
+      endDate: booking.end_date,
+      excludeBookingId: booking_id,
+    });
+    if (booking.extra_equipment_id) {
+      const extraBlockers = await findBlockingBookings({
+        equipmentId: booking.extra_equipment_id,
+        startDate: booking.start_date,
+        endDate: booking.end_date,
+        excludeBookingId: booking_id,
+      });
+      blockers.push(...extraBlockers);
+    }
+    if (blockers.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Those dates were just booked by someone else — please go back and pick new dates.",
+          code: "DATES_UNAVAILABLE",
+        },
+        { status: 409 },
+      );
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Availability check failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 
   const customerEmail = (booking.customer as unknown as CustomerEmail)?.email;

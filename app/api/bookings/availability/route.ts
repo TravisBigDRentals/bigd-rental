@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
-import { addDays, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
 import { availabilityQuery } from "@/lib/bookings/schema";
-import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { findBlockingBookings } from "@/lib/bookings/availability";
 
 export const runtime = "nodejs";
-
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -27,28 +23,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "end_date before start_date" }, { status: 400 });
   }
 
-  // Apply same one-day inspection buffer as the DB trigger so the UX hint
-  // matches what the create endpoint will actually accept.
-  const bufferedEnd = isoDate(addDays(parseISO(end_date), 1));
-  const bufferedStart = isoDate(addDays(parseISO(start_date), -1));
-
-  const supabase = createSupabaseServiceClient();
-  // Block dates where the requested equipment is taken in *either* slot
-  // (main equipment_id OR the extra_equipment_id added in migration 0015).
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("id, start_date, end_date, status, equipment_id, extra_equipment_id")
-    .or(`equipment_id.eq.${equipment_id},extra_equipment_id.eq.${equipment_id}`)
-    .neq("status", "canceled")
-    .lte("start_date", bufferedEnd)
-    .gte("end_date", bufferedStart);
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  try {
+    const conflicts = await findBlockingBookings({
+      equipmentId: equipment_id,
+      startDate: start_date,
+      endDate: end_date,
+    });
+    return NextResponse.json({
+      available: conflicts.length === 0,
+      conflicts,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Availability check failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-
-  return NextResponse.json({
-    available: (data ?? []).length === 0,
-    conflicts: data ?? [],
-  });
 }
