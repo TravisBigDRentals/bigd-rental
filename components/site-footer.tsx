@@ -4,24 +4,29 @@ import Link from "next/link";
 // Site-wide footer. Mounted by each customer-facing page (admin pages
 // have their own minimal chrome and don't render this).
 export function SiteFooter() {
+  // Marketing pages live on the WordPress site; only this app's
+  // booking pages are internal routes.
+  const MARKETING_HOME = "http://rohitb256.sg-host.com";
   const navLinks = [
-    { label: "Home", href: "/" },
-    { label: "About", href: "#" },
-    { label: "Apparel", href: "#" },
-    { label: "Contact", href: "#" },
+    { label: "Home", href: MARKETING_HOME },
+    { label: "About", href: "https://rohitb256.sg-host.com/about/" },
+    { label: "Apparel", href: "https://rohitb256.sg-host.com/shop/" },
+    { label: "Contact", href: "https://rohitb256.sg-host.com/contact/" },
   ];
 
   return (
     <footer className="bg-ink text-paper mt-24">
       <div className="max-w-7xl mx-auto px-6 py-14 grid gap-12 md:grid-cols-[1fr_auto] md:items-start">
         <div className="space-y-6">
-          <Image
-            src="/brand/big-d-footer-logo.png"
-            alt="Big D's Rental Co."
-            width={140}
-            height={88}
-            className="h-20 w-auto invert"
-          />
+          <a href={MARKETING_HOME} aria-label="Big D's Rental Co. home">
+            <Image
+              src="/brand/big-d-footer-logo.png"
+              alt="Big D's Rental Co."
+              width={140}
+              height={88}
+              className="h-20 w-auto invert"
+            />
+          </a>
 
           <div className="flex items-center gap-3">
             <a
@@ -56,9 +61,9 @@ export function SiteFooter() {
           <ul className="space-y-3 text-sm">
             {navLinks.map((l) => (
               <li key={l.label}>
-                <Link href={l.href} className="text-paper/80 hover:text-accent transition-colors">
+                <a href={l.href} className="text-paper/80 hover:text-accent transition-colors">
                   {l.label}
-                </Link>
+                </a>
               </li>
             ))}
           </ul>

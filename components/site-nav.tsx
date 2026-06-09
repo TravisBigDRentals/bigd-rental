@@ -10,20 +10,22 @@ export async function SiteNav() {
   const { data: { user } } = await supabase.auth.getUser();
   const signedIn = !!user;
 
-  // ABOUT, APPAREL, CONTACT URLs will land later; placeholder hashes
-  // for now so the layout is correct.
+  // Marketing pages live on the WordPress site (sg-host.com); RENT is
+  // the only internal route. External links use a plain <a> so we don't
+  // hand Next.js routes a non-app URL.
+  const MARKETING_HOME = "http://rohitb256.sg-host.com";
   const links = [
-    { label: "HOME", href: "/" },
-    { label: "ABOUT", href: "#" },
-    { label: "RENT", href: "/book" },
-    { label: "APPAREL", href: "#" },
-    { label: "CONTACT", href: "#" },
+    { label: "HOME", href: MARKETING_HOME, external: true },
+    { label: "ABOUT", href: "https://rohitb256.sg-host.com/about/", external: true },
+    { label: "RENT", href: "/book", external: false },
+    { label: "APPAREL", href: "https://rohitb256.sg-host.com/shop/", external: true },
+    { label: "CONTACT", href: "https://rohitb256.sg-host.com/contact/", external: true },
   ];
 
   return (
     <nav className="sticky top-0 z-30 border-b border-ink/10 bg-paper/95 backdrop-blur supports-[backdrop-filter]:bg-paper/85">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-6">
-        <Link href="/" className="flex items-center" aria-label="Big D's Rental Co. home">
+        <a href={MARKETING_HOME} className="flex items-center" aria-label="Big D's Rental Co. home">
           <Image
             src="/brand/big-d-footer-logo.png"
             alt="Big D's Rental Co."
@@ -32,18 +34,27 @@ export async function SiteNav() {
             priority
             className="h-12 w-auto"
           />
-        </Link>
+        </a>
 
         <div className="flex items-center gap-8">
           <ul className="hidden md:flex items-center gap-8 font-display tracking-[0.08em] text-sm">
             {links.map((l) => (
               <li key={l.label}>
-                <Link
-                  href={l.href}
-                  className="text-ink/90 hover:text-accent transition-colors"
-                >
-                  {l.label}
-                </Link>
+                {l.external ? (
+                  <a
+                    href={l.href}
+                    className="text-ink/90 hover:text-accent transition-colors"
+                  >
+                    {l.label}
+                  </a>
+                ) : (
+                  <Link
+                    href={l.href}
+                    className="text-ink/90 hover:text-accent transition-colors"
+                  >
+                    {l.label}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
