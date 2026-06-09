@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatCents } from "@/lib/pricing";
 import { ResendSignatureButton } from "./resend-signature-button";
+import { CancelBookingButton } from "./cancel-booking-button";
 
 export const metadata = {
   title: "Booking detail — Big D's Admin",
@@ -48,6 +49,10 @@ type BookingDetail = {
   total_cents: number;
   discount_cents: number;
   liability_waiver_cents: number;
+  canceled_at: string | null;
+  canceled_reason: string | null;
+  refund_id: string | null;
+  refund_amount_cents: number | null;
   payment_intent_id: string | null;
   paid_at: string | null;
   signed_agreement_pdf_url: string | null;
@@ -85,6 +90,7 @@ export default async function BookingDetailPage({
     .select(`
       id, start_date, end_date, dropoff_time, special_instructions, status,
       total_cents, discount_cents, liability_waiver_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
+      canceled_at, canceled_reason, refund_id, refund_amount_cents,
       drivers_license_front_url, drivers_license_back_url,
       delivered_at, returned_at, created_at,
       customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
@@ -129,10 +135,43 @@ export default async function BookingDetailPage({
           )}
           <p className="mt-1 font-mono text-xs text-muted">Booking {booking.id}</p>
         </div>
-        <span className="inline-block rounded-full border border-ink/15 bg-paper px-3 py-1 text-xs font-mono uppercase tracking-widest">
+        <span className={`inline-block rounded-full border px-3 py-1 text-xs font-mono uppercase tracking-widest ${
+          booking.status === "canceled"
+            ? "bg-red-100 text-red-900 border-red-300"
+            : "bg-paper text-ink border-ink/15"
+        }`}>
           {booking.status}
         </span>
       </header>
+
+      {booking.canceled_at && (
+        <section className="mt-6 rounded-2xl border border-red-300 bg-red-50 px-5 py-4">
+          <p className="font-mono text-xs uppercase tracking-widest text-red-900">Canceled</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 text-sm text-red-900">
+            <div>
+              <p className="text-xs text-red-900/70">Canceled at</p>
+              <p className="font-mono">{new Date(booking.canceled_at).toLocaleString("en-CA")}</p>
+            </div>
+            {booking.refund_amount_cents !== null && (
+              <div>
+                <p className="text-xs text-red-900/70">Refund</p>
+                <p className="font-mono">
+                  {formatCents(booking.refund_amount_cents)}
+                  {booking.refund_id && (
+                    <span className="ml-2 text-xs text-red-900/70 break-all">({booking.refund_id})</span>
+                  )}
+                </p>
+              </div>
+            )}
+            {booking.canceled_reason && (
+              <div className="sm:col-span-2">
+                <p className="text-xs text-red-900/70">Reason</p>
+                <p className="whitespace-pre-wrap">{booking.canceled_reason}</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="mt-10 grid gap-6 sm:grid-cols-2">
         <DetailCard title="Equipment">
@@ -245,7 +284,7 @@ export default async function BookingDetailPage({
                 </a>
               ) : "Not signed yet"}
             </p>
-            {!booking.signed_agreement_pdf_url && (
+            {!booking.signed_agreement_pdf_url && booking.status !== "canceled" && (
               <ResendSignatureButton bookingId={booking.id} />
             )}
           </div>
@@ -264,6 +303,22 @@ export default async function BookingDetailPage({
           Delivery + return workflows ship in Phase 6.
         </p>
       </section>
+
+      {booking.status !== "canceled" && (
+        <section className="mt-8 rounded-2xl border border-red-200 bg-red-50/40 p-5 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-mono text-xs uppercase tracking-widest text-red-900">Cancel booking</h2>
+            <p className="mt-1 text-sm text-red-900/80">
+              Mark this booking as canceled and free the dates. If the customer paid, we&rsquo;ll issue a Square refund automatically.
+            </p>
+          </div>
+          <CancelBookingButton
+            bookingId={booking.id}
+            totalCents={booking.total_cents}
+            hasPayment={!!booking.payment_intent_id}
+          />
+        </section>
+      )}
     </main>
   );
 }
