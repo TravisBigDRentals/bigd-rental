@@ -128,9 +128,14 @@ export function PricingWidget(props: PricingProps) {
         <div className="mt-6 pt-5 border-t border-ink/15 flex items-end justify-between gap-3">
           <span className="font-display text-2xl tracking-wide uppercase">Total</span>
           <span className="font-display text-3xl tracking-wide">
-            {haveDates ? formatCents(total) : formatCents(0)}
+            {haveDates ? formatCents(total) : "—"}
           </span>
         </div>
+        {!haveDates && (equipment || selectedAddons.length > 0) && (
+          <p className="mt-2 text-xs text-muted text-right">
+            Pick rental dates to see your total.
+          </p>
+        )}
 
         <button
           type="button"
