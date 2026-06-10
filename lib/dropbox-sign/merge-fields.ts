@@ -16,6 +16,8 @@ export type CustomerLike = {
   project_city: string;
   project_province: string;
   project_postal_code: string;
+  drivers_license_number?: string | null;
+  drivers_license_expiry?: string | null;
 };
 
 export type BookingLike = {
@@ -88,5 +90,7 @@ export function buildMergeFields(
     { name: "rental_days",              value: String(rentalDays(booking.start_date, booking.end_date)) },
     { name: "addons_summary",           value: addonsSummary },
     { name: "total_cad",                value: formatCents(booking.total_cents) },
+    { name: "drivers_license_number",   value: customer.drivers_license_number ?? "" },
+    { name: "drivers_license_expiry",   value: formatLongDate(customer.drivers_license_expiry ?? "") },
   ];
 }

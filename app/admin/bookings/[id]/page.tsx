@@ -17,6 +17,8 @@ type Customer = {
   phone: string;
   drivers_license_front_url: string | null;
   drivers_license_back_url: string | null;
+  drivers_license_number: string | null;
+  drivers_license_expiry: string | null;
   customer_address_line1: string;
   customer_address_line2: string | null;
   customer_city: string;
@@ -58,6 +60,8 @@ type BookingDetail = {
   signed_agreement_pdf_url: string | null;
   drivers_license_front_url: string | null;
   drivers_license_back_url: string | null;
+  drivers_license_number: string | null;
+  drivers_license_expiry: string | null;
   delivered_at: string | null;
   returned_at: string | null;
   created_at: string;
@@ -92,8 +96,9 @@ export default async function BookingDetailPage({
       total_cents, discount_cents, liability_waiver_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
       canceled_at, canceled_reason, refund_id, refund_amount_cents,
       drivers_license_front_url, drivers_license_back_url,
+      drivers_license_number, drivers_license_expiry,
       delivered_at, returned_at, created_at,
-      customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
+      customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, drivers_license_number, drivers_license_expiry, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
       equipment:equipment_id ( name, serial ),
       extra_equipment:extra_equipment_id ( name, serial ),
       booking_addons ( id, quantity, daily_rate_cents, addon:addon_id ( name ) ),
@@ -228,7 +233,21 @@ export default async function BookingDetailPage({
           </DetailCard>
         )}
         <DetailCard title="Driver's license" className="sm:col-span-2">
-          <div className="flex flex-wrap gap-4 text-sm">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs text-muted">Number</p>
+              <p className="font-mono text-sm">
+                {booking.drivers_license_number ?? booking.customer?.drivers_license_number ?? <span className="text-muted">—</span>}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Expires</p>
+              <p className="font-mono text-sm">
+                {(booking.drivers_license_expiry ?? booking.customer?.drivers_license_expiry) ?? <span className="text-muted">—</span>}
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-ink/10 flex flex-wrap gap-4 text-sm">
             {dlFrontUrl ? (
               <a href={dlFrontUrl} target="_blank" rel="noopener" className="underline text-accent">
                 ↗ Front (7-day link)

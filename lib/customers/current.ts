@@ -24,6 +24,8 @@ export type CurrentCustomer = {
     project_postal_code: string;
     drivers_license_front_url: string;
     drivers_license_back_url: string;
+    drivers_license_number: string | null;
+    drivers_license_expiry: string | null;
   } | null;
 };
 
@@ -49,7 +51,7 @@ export async function getCurrentCustomer(): Promise<CurrentCustomer | null> {
   const { data } = await service
     .from("customers")
     .select(
-      "id, first_name, last_name, business_name, email, phone, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code, drivers_license_front_url, drivers_license_back_url",
+      "id, first_name, last_name, business_name, email, phone, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code, drivers_license_front_url, drivers_license_back_url, drivers_license_number, drivers_license_expiry",
     )
     .eq("auth_user_id", user.id)
     .maybeSingle();

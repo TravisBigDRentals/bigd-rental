@@ -180,6 +180,8 @@ export async function POST(req: Request) {
     phone: customer.phone,
     drivers_license_front_url: customer.drivers_license_front_path,
     drivers_license_back_url: customer.drivers_license_back_path,
+    drivers_license_number: customer.drivers_license_number,
+    drivers_license_expiry: customer.drivers_license_expiry,
     customer_address_line1: customer.customer_address_line1,
     customer_address_line2: customer.customer_address_line2 ?? null,
     customer_city: customer.customer_city,
@@ -265,6 +267,8 @@ export async function POST(req: Request) {
       discount_cents: pricing.discountCents,
       drivers_license_front_url: customer.drivers_license_front_path,
       drivers_license_back_url: customer.drivers_license_back_path,
+      drivers_license_number: customer.drivers_license_number,
+      drivers_license_expiry: customer.drivers_license_expiry,
     })
     .select("id")
     .single();

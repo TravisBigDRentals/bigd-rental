@@ -24,6 +24,8 @@ type PrefillBundle = {
     phone: string;
     drivers_license_front_url: string;
     drivers_license_back_url: string;
+    drivers_license_number: string | null;
+    drivers_license_expiry: string | null;
     customer_address_line1: string;
     customer_address_line2: string | null;
     customer_city: string;
@@ -47,9 +49,11 @@ async function loadPrefill(bookingId: string): Promise<PrefillBundle | null> {
     .select(`
       start_date, end_date, dropoff_time,
       drivers_license_front_url, drivers_license_back_url,
+      drivers_license_number, drivers_license_expiry,
       customer:customer_id (
         first_name, last_name, business_name, email, phone,
         drivers_license_front_url, drivers_license_back_url,
+        drivers_license_number, drivers_license_expiry,
         customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code,
         project_address_line1, project_address_line2, project_city, project_province, project_postal_code
       )
@@ -68,6 +72,8 @@ async function loadPrefill(bookingId: string): Promise<PrefillBundle | null> {
   // prior booking, which is what we want to re-use here.
   const dlFront = data.drivers_license_front_url ?? c.drivers_license_front_url ?? "";
   const dlBack = data.drivers_license_back_url ?? c.drivers_license_back_url ?? "";
+  const dlNumber = data.drivers_license_number ?? c.drivers_license_number ?? null;
+  const dlExpiry = data.drivers_license_expiry ?? c.drivers_license_expiry ?? null;
 
   const dropoff: DropoffTime = data.dropoff_time === "10:00 AM" ? "10:00 AM" : "8:00 AM";
 
@@ -80,6 +86,8 @@ async function loadPrefill(bookingId: string): Promise<PrefillBundle | null> {
       phone: c.phone,
       drivers_license_front_url: dlFront,
       drivers_license_back_url: dlBack,
+      drivers_license_number: dlNumber,
+      drivers_license_expiry: dlExpiry,
       customer_address_line1: c.customer_address_line1,
       customer_address_line2: c.customer_address_line2,
       customer_city: c.customer_city,

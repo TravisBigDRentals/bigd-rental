@@ -17,6 +17,10 @@ export const customerInput = z.object({
   phone: z.string().min(7).max(40),
   drivers_license_front_path: z.string().min(1),
   drivers_license_back_path: z.string().min(1),
+  // DL number + expiry text values — fed into the Dropbox Sign
+  // template's DL fields. Expiry is YYYY-MM-DD.
+  drivers_license_number: z.string().min(1).max(40),
+  drivers_license_expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD"),
   customer_address_line1: z.string().min(1),
   customer_address_line2: z.string().nullable().optional(),
   customer_city: z.string().min(1),

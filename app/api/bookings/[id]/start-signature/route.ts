@@ -22,6 +22,8 @@ type NestedBooking = {
   total_cents: number;
   status: string;
   signature_request_id: string | null;
+  drivers_license_number: string | null;
+  drivers_license_expiry: string | null;
   customer: CustomerLike | null;
   equipment: EquipmentLike | null;
   booking_addons: { addon: AddonLike | null }[] | null;
@@ -37,10 +39,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .from("bookings")
     .select(`
       id, start_date, end_date, dropoff_time, total_cents, status, signature_request_id,
+      drivers_license_number, drivers_license_expiry,
       customer:customer_id (
         first_name, last_name, business_name, email, phone,
         customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code,
-        project_address_line1, project_address_line2, project_city, project_province, project_postal_code
+        project_address_line1, project_address_line2, project_city, project_province, project_postal_code,
+        drivers_license_number, drivers_license_expiry
       ),
       equipment:equipment_id ( name, serial, daily_rate_cents ),
       booking_addons ( addon:addon_id ( name, daily_rate_cents ) )
@@ -106,7 +110,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: `Template lookup failed: ${extractError(err)}` }, { status: 502 });
   }
 
-  const allFields = buildMergeFields(customer, booking, equipment, addons);
+  // Booking row holds the per-booking DL snapshot (matches the DL
+  // image paths). Prefer the booking snapshot over the customer row's
+  // current values so the signed agreement always reflects what the
+  // customer entered at booking time.
+  const customerForMerge: CustomerLike = {
+    ...customer,
+    drivers_license_number: booking.drivers_license_number ?? customer.drivers_license_number ?? null,
+    drivers_license_expiry: booking.drivers_license_expiry ?? customer.drivers_license_expiry ?? null,
+  };
+  const allFields = buildMergeFields(customerForMerge, booking, equipment, addons);
   const customFields = allFields.filter((f) => templateFieldNames.has(f.name));
 
   try {

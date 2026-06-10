@@ -35,6 +35,8 @@ type CustomerState = {
   phone: string;
   drivers_license_front_path: string | null;
   drivers_license_back_path: string | null;
+  drivers_license_number: string;
+  drivers_license_expiry: string;
   customer_address_line1: string;
   customer_address_line2: string;
   customer_city: string;
@@ -55,6 +57,8 @@ const EMPTY_CUSTOMER: CustomerState = {
   phone: "",
   drivers_license_front_path: null,
   drivers_license_back_path: null,
+  drivers_license_number: "",
+  drivers_license_expiry: "",
   customer_address_line1: "",
   customer_address_line2: "",
   customer_city: "Calgary",
@@ -196,6 +200,8 @@ type InitialCustomer = {
   phone: string;
   drivers_license_front_url: string;
   drivers_license_back_url: string;
+  drivers_license_number: string | null;
+  drivers_license_expiry: string | null;
   customer_address_line1: string;
   customer_address_line2: string | null;
   customer_city: string;
@@ -225,6 +231,8 @@ function customerStateFromInitial(c: InitialCustomer | null, authEmail: string |
     // these paths back to /api/bookings/create unchanged.
     drivers_license_front_path: c.drivers_license_front_url,
     drivers_license_back_path: c.drivers_license_back_url,
+    drivers_license_number: c.drivers_license_number ?? "",
+    drivers_license_expiry: c.drivers_license_expiry ?? "",
     customer_address_line1: c.customer_address_line1,
     customer_address_line2: c.customer_address_line2 ?? "",
     customer_city: c.customer_city,
@@ -622,6 +630,8 @@ export function BookingForm({
     }
     if (!customer.drivers_license_front_path) return setError("Driver's license (front) is required");
     if (!customer.drivers_license_back_path) return setError("Driver's license (back) is required");
+    if (!customer.drivers_license_number.trim()) return setError("Driver's license number is required");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(customer.drivers_license_expiry)) return setError("Driver's license expiry date is required");
     if (!customer.customer_address_line1.trim()) return setError("Customer address is required");
     if (!customer.customer_city.trim()) return setError("Customer city is required");
     if (!customer.customer_province.trim()) return setError("Customer province is required");
@@ -661,6 +671,8 @@ export function BookingForm({
             phone: customer.phone.trim(),
             drivers_license_front_path: customer.drivers_license_front_path,
             drivers_license_back_path: customer.drivers_license_back_path,
+            drivers_license_number: customer.drivers_license_number.trim(),
+            drivers_license_expiry: customer.drivers_license_expiry,
             customer_address_line1: customer.customer_address_line1.trim(),
             customer_address_line2: customer.customer_address_line2.trim() || null,
             customer_city: customer.customer_city.trim(),
@@ -1498,6 +1510,22 @@ function StepCustomer(props: {
             </div>
           </>
         )}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field label="License number *">
+            <input type="text" value={customer.drivers_license_number}
+              onChange={(e) => updateCustomer("drivers_license_number", e.target.value)}
+              autoComplete="off"
+              maxLength={40}
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
+              placeholder="As printed on the card" required />
+          </Field>
+          <Field label="License expiry *">
+            <input type="date" value={customer.drivers_license_expiry}
+              onChange={(e) => updateCustomer("drivers_license_expiry", e.target.value)}
+              className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
+              required />
+          </Field>
+        </div>
       </div>
 
       <div>
