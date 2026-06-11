@@ -1,6 +1,6 @@
 import "server-only";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { documentApi, templateApi, templateId, senderEmail, extractBoldSignError } from "./client";
+import { documentApi, templateApi, templateId, extractBoldSignError } from "./client";
 import { buildSenderFields, type CustomerLike, type EquipmentLike, type AddonLike } from "./merge-fields";
 
 function unwrap<T>(v: T | T[] | null | undefined): T | null {
@@ -109,21 +109,13 @@ export async function sendAgreementByEmail(bookingId: string): Promise<
     });
   }
 
-  // Send template — disableEmails: false so BoldSign emails the renter
-  // the signing link. SENDER has no existingFormFields (prefillFields
-  // handles SENDER's textboxes + auto-completes the role).
+  // Template has a single SENDER role — the customer signs as SENDER.
+  // disableEmails: false so BoldSign emails them the signing link.
   const sendForm = {
     roles: [
       {
         roleIndex: 1,
         signerRole: "SENDER",
-        signerName: "Big D's Rental Co.",
-        signerEmail: senderEmail(),
-        signerType: "Signer",
-      },
-      {
-        roleIndex: 2,
-        signerRole: "RENTER",
         signerName: `${customer.first_name} ${customer.last_name}`.trim(),
         signerEmail: customer.email,
         signerType: "Signer",

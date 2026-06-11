@@ -6,7 +6,6 @@ import {
   templateApi,
   documentApi,
   templateId,
-  senderEmail,
   extractBoldSignError,
 } from "@/lib/boldsign/client";
 import { buildSenderFields, type CustomerLike, type EquipmentLike, type AddonLike } from "@/lib/boldsign/merge-fields";
@@ -196,32 +195,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    // BoldSign's signerType enum only allows Signer / Reviewer /
-    // InPersonSigner — there is NO "Sender" value. The template's
-    // SENDER role just means "fields pre-filled by the API caller".
-    // We model that as a Signer role with all its fields pre-filled
-    // via existingFormFields; BoldSign treats it as already done.
-    // Two-step pattern that BoldSign actually supports for prefilled
-    // sender-role fields:
-    //   1) Send the template with both roles BUT pass no existingFormFields
-    //      on SENDER. Sender role still exists on the document with empty
-    //      fields BoldSign expects someone to fill.
-    //   2) Immediately call documentApi.prefillFields(...) with SENDER's
-    //      values. This both populates the textboxes AND auto-completes
-    //      the SENDER role, so RENTER's embedded sign link no longer hits
-    //      the "other signers must complete first" guard.
+    // Template has a single SENDER role that owns all textboxes plus
+    // the signature. The customer signs *as* SENDER — we feed their
+    // email into the SENDER role so getEmbeddedSignLink resolves to
+    // them, then call prefillFields to pre-populate the textboxes
+    // (signature is left unfilled for the customer to actually sign).
     const sendForm = {
       roles: [
         {
           roleIndex: 1,
           signerRole: "SENDER",
-          signerName: "Big D's Rental Co.",
-          signerEmail: senderEmail(),
-          signerType: "Signer",
-        },
-        {
-          roleIndex: 2,
-          signerRole: "RENTER",
           signerName: `${customer.first_name} ${customer.last_name}`.trim(),
           signerEmail: customer.email,
           signerType: "Signer",
