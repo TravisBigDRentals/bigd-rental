@@ -15,6 +15,13 @@ export const runtime = "nodejs";
 
 const PathSchema = z.object({ id: z.string().uuid() });
 
+// Module-scoped cache of the SENDER role's fillable field IDs, keyed by
+// template id. Lives for the lifetime of the serverless instance —
+// templates don't change often, so this is fine and cuts a BoldSign
+// call per booking which mattered when we hit the 50/hour quota
+// during testing.
+const templateFillableCache = new Map<string, Set<string>>();
+
 type NestedBooking = {
   id: string;
   start_date: string;
@@ -133,46 +140,49 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // Fetch the template's actual field list. BoldSign rejects the send
   // with "field count exceeds existing field count" if we hand it any
   // id that isn't on the template, so we filter our merge payload down
-  // to exactly the ids the template has on the SENDER role.
+  // to exactly the ids the template has on the SENDER role. Result is
+  // cached in module scope (per serverless instance) so we don't burn
+  // BoldSign's 50/hour quota re-fetching this every booking.
   let senderFields: typeof candidateSenderFields = candidateSenderFields;
   try {
-    const tmplResp = await templateApi().getProperties(templateId());
-    const tmpl = unwrapBody<{
-      roles?: Array<{
-        name?: string | null;
-        formFields?: Array<{ id?: string | null; fieldType?: string | null; type?: string | null }> | null;
-      }>;
-    }>(tmplResp);
-    const senderRole = (tmpl.roles ?? []).find(
-      (r) => (r.name ?? "").toUpperCase() === "SENDER",
-    );
-    // Substring matching against the field type — BoldSign uses
-    // variations like "DateSigned", "DateSignedField", "Signature",
-    // "SignatureField", etc. Case-insensitive contains check covers
-    // them all.
-    const UNFILLABLE_SUBSTRINGS = [
-      "signature",
-      "initial",
-      "formula",
-      "drawing",
-      "datesigned",
-      "signeddate",
-    ];
-    const senderTemplateFields = senderRole?.formFields ?? [];
-    console.log("[start-signature] template SENDER fields", senderTemplateFields.map((f) => ({
-      id: f.id,
-      fieldType: f.fieldType,
-      type: f.type,
-    })));
-    const fillableIds = new Set(
-      senderTemplateFields
-        .filter((f) => {
-          const t = (f.fieldType ?? f.type ?? "").toString().toLowerCase();
-          return !UNFILLABLE_SUBSTRINGS.some((s) => t.includes(s));
-        })
-        .map((f) => f.id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0),
-    );
+      const tmpl = unwrapBody<{
+        roles?: Array<{
+          name?: string | null;
+          formFields?: Array<{ id?: string | null; fieldType?: string | null; type?: string | null }> | null;
+        }>;
+      }>(tmplResp);
+      const senderRole = (tmpl.roles ?? []).find(
+        (r) => (r.name ?? "").toUpperCase() === "SENDER",
+      );
+      // Substring matching against the field type — BoldSign uses
+      // variations like "DateSigned", "DateSignedField", "Signature",
+      // "SignatureField", etc. Case-insensitive contains check covers
+      // them all.
+      const UNFILLABLE_SUBSTRINGS = [
+        "signature",
+        "initial",
+        "formula",
+        "drawing",
+        "datesigned",
+        "signeddate",
+      ];
+      const senderTemplateFields = senderRole?.formFields ?? [];
+      console.log("[start-signature] template SENDER fields", senderTemplateFields.map((f) => ({
+        id: f.id,
+        fieldType: f.fieldType,
+        type: f.type,
+      })));
+      fillableIds = new Set(
+        senderTemplateFields
+          .filter((f) => {
+            const t = (f.fieldType ?? f.type ?? "").toString().toLowerCase();
+            return !UNFILLABLE_SUBSTRINGS.some((s) => t.includes(s));
+          })
+          .map((f) => f.id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      );
+      templateFillableCache.set(templateId(), fillableIds);
+    }
     senderFields = candidateSenderFields.filter((f) => fillableIds.has(f.id));
   } catch (err) {
     console.error("[start-signature] template fetch failed", {
