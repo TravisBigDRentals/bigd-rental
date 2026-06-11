@@ -131,6 +131,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const senderFields = buildSenderFields(customerForMerge, booking, equipment, addons);
 
   try {
+    // BoldSign's signerType enum only allows Signer / Reviewer /
+    // InPersonSigner — there is NO "Sender" value. The template's
+    // SENDER role just means "fields pre-filled by the API caller".
+    // We model that as a Signer role with all its fields pre-filled
+    // via existingFormFields; BoldSign treats it as already done.
     const sendForm = {
       roles: [
         {
@@ -138,7 +143,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           signerRole: "SENDER",
           signerName: "Big D's Rental Co.",
           signerEmail: senderEmail(),
-          signerType: "Sender" as const,
+          signerType: "Signer",
           existingFormFields: senderFields,
         },
         {
@@ -146,7 +151,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           signerRole: "RENTER",
           signerName: `${customer.first_name} ${customer.last_name}`.trim(),
           signerEmail: customer.email,
-          signerType: "Signer" as const,
+          signerType: "Signer",
         },
       ],
       title: `Rental Agreement — ${equipment.name}`,
@@ -183,6 +188,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     return NextResponse.json({ sign_url: signUrl, document_id: documentId });
   } catch (err) {
-    return NextResponse.json({ error: extractBoldSignError(err) }, { status: 502 });
+    const msg = extractBoldSignError(err);
+    console.error("[start-signature] BoldSign error", {
+      bookingId: id,
+      error: msg,
+      raw: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
