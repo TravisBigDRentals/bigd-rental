@@ -1910,36 +1910,77 @@ function StepSign({
   onSigned: () => void;
   onBack: () => void;
 }) {
+  const [signUrl, setSignUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [advancing, setAdvancing] = useState(false);
+  const [phase, setPhase] = useState<"loading" | "open" | "finalizing" | "done">("loading");
 
-  async function continueToPayment() {
-    setError(null);
-    setAdvancing(true);
-    try {
-      // Flip booking status from pending_signature to pending_payment so
-      // /api/payments/charge accepts the booking. The signed agreement
-      // gets emailed to the customer right after their card is charged.
-      const res = await fetch(`/api/bookings/${bookingId}/finalize-signature`, { method: "POST" });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        setError(json.error ?? "Couldn't advance to payment — try again.");
-        return;
+  // Kick off the signature request — server returns the BoldSign
+  // embedded sign URL which we drop into the iframe below.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/bookings/${bookingId}/start-signature`, { method: "POST" });
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok || !json.sign_url) {
+          setError(json.error ?? "Failed to start signing");
+          return;
+        }
+        setSignUrl(json.sign_url);
+        setPhase("open");
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to start signing");
       }
-      onSigned();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't advance to payment.");
-    } finally {
-      setAdvancing(false);
+    })();
+    return () => { cancelled = true; };
+  }, [bookingId]);
+
+  // BoldSign redirects the iframe to /book/[id]/signed-callback when the
+  // renter finishes signing. That page postMessage's up with type
+  // "bigds:boldsign:signed". We catch it here, poll finalize-signature
+  // (which reads the DB column set by the BoldSign webhook), then advance.
+  useEffect(() => {
+    function handle(evt: MessageEvent) {
+      if (!evt.data || typeof evt.data !== "object") return;
+      const data = evt.data as { type?: string; bookingId?: string };
+      if (data.type !== "bigds:boldsign:signed" || data.bookingId !== bookingId) return;
+      setPhase("finalizing");
+      (async () => {
+        try {
+          // Webhook may not have fired yet — retry a few times so the
+          // status flip lands before we ask the user to pay. Each call
+          // hits our DB only (not BoldSign), so retries are cheap.
+          let lastErr = "Failed to confirm signature";
+          for (let i = 0; i < 10; i++) {
+            const res = await fetch(`/api/bookings/${bookingId}/finalize-signature`, { method: "POST" });
+            if (res.ok) {
+              setPhase("done");
+              onSigned();
+              return;
+            }
+            const json = await res.json().catch(() => ({}));
+            lastErr = json.error ?? lastErr;
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          setError(lastErr);
+          setPhase("open");
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to confirm signature");
+          setPhase("open");
+        }
+      })();
     }
-  }
+    window.addEventListener("message", handle);
+    return () => window.removeEventListener("message", handle);
+  }, [bookingId, onSigned]);
 
   return (
     <section className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold uppercase">Rental agreement</h2>
+        <h2 className="text-2xl font-bold uppercase">Sign your rental agreement</h2>
         <p className="mt-1 text-sm text-muted">
-          As soon as you complete payment, we&rsquo;ll email you the rental agreement to sign. Your booking is held until you sign — the signed copy is then stored on your account and emailed to you.
+          Review the agreement carefully, sign at the bottom, and submit. Your signed copy will be stored with the booking and emailed to you after payment.
         </p>
       </div>
 
@@ -1948,25 +1989,37 @@ function StepSign({
           {error}
         </div>
       )}
-
-      <div className="rounded-lg border border-ink/15 bg-paper px-5 py-4 text-sm">
-        <p className="font-medium">What happens next</p>
-        <ol className="mt-2 list-decimal pl-5 space-y-1 text-ink/80">
-          <li>Click <strong>Continue to payment</strong> below.</li>
-          <li>Enter your card details and complete the charge.</li>
-          <li>You&rsquo;ll receive an email from BoldSign with a link to the rental agreement — sign at your convenience.</li>
-          <li>A copy of the signed agreement will be emailed back to you.</li>
-        </ol>
-      </div>
+      {phase === "loading" && (
+        <div className="rounded-lg border border-ink/15 bg-paper px-4 py-3 text-sm text-muted">
+          Preparing your agreement…
+        </div>
+      )}
+      {phase === "open" && signUrl && !error && (
+        <div className="rounded-lg border border-ink/15 bg-paper overflow-hidden">
+          <iframe
+            src={signUrl}
+            className="w-full"
+            style={{ height: "85vh", minHeight: "640px" }}
+            allow="camera"
+            title="Sign rental agreement"
+          />
+        </div>
+      )}
+      {phase === "finalizing" && (
+        <div className="rounded-lg border border-ink/15 bg-paper px-4 py-3 text-sm text-muted">
+          Verifying signature…
+        </div>
+      )}
+      {phase === "done" && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          ✓ Signature received — advancing to payment.
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
-        <button type="button" onClick={onBack} disabled={advancing}
+        <button type="button" onClick={onBack} disabled={phase === "finalizing"}
           className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 disabled:opacity-50 transition-colors">
           ← Back
-        </button>
-        <button type="button" onClick={continueToPayment} disabled={advancing}
-          className="rounded-full bg-accent px-6 py-3 text-paper font-medium hover:bg-accent-hover disabled:opacity-50 transition-colors">
-          {advancing ? "…" : "Continue to payment →"}
         </button>
       </div>
     </section>
