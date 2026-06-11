@@ -188,12 +188,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     // SENDER role just means "fields pre-filled by the API caller".
     // We model that as a Signer role with all its fields pre-filled
     // via existingFormFields; BoldSign treats it as already done.
-    // Mark every SENDER field as ReadOnly so BoldSign knows nothing
-    // is left for SENDER to fill — combined with signerOrder=1, BoldSign
-    // auto-completes SENDER first and only RENTER needs to sign in the
-    // iframe. (Reviewer doesn't work — "Reviewer should not have any form
-    // fields"; Signer with editable fields would wait for SENDER input.)
-    const senderFieldsReadOnly = senderFields.map((f) => ({ ...f, isReadOnly: true }));
+    // Two-step pattern that BoldSign actually supports for prefilled
+    // sender-role fields:
+    //   1) Send the template with both roles BUT pass no existingFormFields
+    //      on SENDER. Sender role still exists on the document with empty
+    //      fields BoldSign expects someone to fill.
+    //   2) Immediately call documentApi.prefillFields(...) with SENDER's
+    //      values. This both populates the textboxes AND auto-completes
+    //      the SENDER role, so RENTER's embedded sign link no longer hits
+    //      the "other signers must complete first" guard.
     const sendForm = {
       roles: [
         {
@@ -202,8 +205,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           signerName: "Big D's Rental Co.",
           signerEmail: senderEmail(),
           signerType: "Signer",
-          signerOrder: 1,
-          existingFormFields: senderFieldsReadOnly,
         },
         {
           roleIndex: 2,
@@ -211,10 +212,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           signerName: `${customer.first_name} ${customer.last_name}`.trim(),
           signerEmail: customer.email,
           signerType: "Signer",
-          signerOrder: 2,
         },
       ],
-      enableSigningOrder: true,
       title: `Rental Agreement — ${equipment.name}`,
       message: "Please review and sign your equipment rental agreement.",
       // Embedded flow — we don't want BoldSign to email the customer; the
@@ -234,6 +233,23 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       .from("bookings")
       .update({ signature_request_id: documentId })
       .eq("id", id);
+
+    // Step 2: prefill SENDER's fields — auto-completes the SENDER role.
+    if (senderFields.length > 0) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await docApi.prefillFields(documentId, { fields: senderFields } as any);
+      } catch (err) {
+        console.error("[start-signature] prefillFields failed", {
+          documentId,
+          error: extractBoldSignError(err),
+        });
+        return NextResponse.json(
+          { error: `Failed to prefill agreement: ${extractBoldSignError(err)}` },
+          { status: 502 },
+        );
+      }
+    }
 
     const linkResp = await docApi.getEmbeddedSignLink(
       documentId,
