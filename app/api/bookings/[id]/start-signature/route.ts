@@ -146,25 +146,29 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const senderRole = (tmpl.roles ?? []).find(
       (r) => (r.name ?? "").toUpperCase() === "SENDER",
     );
-    // Field types BoldSign refuses to pre-fill via API. Signature /
-    // Initial are filled by the signer in the iframe; FormulaField is
-    // computed; DateSigned auto-fills when the signer completes;
-    // Drawing is freehand.
-    const UNFILLABLE = new Set([
-      "Signature",
-      "Initial",
-      "Initials",
-      "Formula",
-      "FormulaField",
-      "Drawing",
-      "DateSigned",
-      "SignedDate",
-    ]);
+    // Substring matching against the field type — BoldSign uses
+    // variations like "DateSigned", "DateSignedField", "Signature",
+    // "SignatureField", etc. Case-insensitive contains check covers
+    // them all.
+    const UNFILLABLE_SUBSTRINGS = [
+      "signature",
+      "initial",
+      "formula",
+      "drawing",
+      "datesigned",
+      "signeddate",
+    ];
+    const senderTemplateFields = senderRole?.formFields ?? [];
+    console.log("[start-signature] template SENDER fields", senderTemplateFields.map((f) => ({
+      id: f.id,
+      fieldType: f.fieldType,
+      type: f.type,
+    })));
     const fillableIds = new Set(
-      (senderRole?.formFields ?? [])
+      senderTemplateFields
         .filter((f) => {
-          const t = (f.fieldType ?? f.type ?? "").toString();
-          return !UNFILLABLE.has(t);
+          const t = (f.fieldType ?? f.type ?? "").toString().toLowerCase();
+          return !UNFILLABLE_SUBSTRINGS.some((s) => t.includes(s));
         })
         .map((f) => f.id)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
