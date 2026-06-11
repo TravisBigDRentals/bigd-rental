@@ -145,6 +145,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // BoldSign's 50/hour quota re-fetching this every booking.
   let senderFields: typeof candidateSenderFields = candidateSenderFields;
   try {
+    let fillableIds = templateFillableCache.get(templateId());
+    if (!fillableIds) {
+      const tmplResp = await templateApi().getProperties(templateId());
       const tmpl = unwrapBody<{
         roles?: Array<{
           name?: string | null;
