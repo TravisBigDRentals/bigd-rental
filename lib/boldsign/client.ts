@@ -45,24 +45,31 @@ export function senderEmail(): string {
   return first || "noreply@bigdrentals.ca";
 }
 
-// Surface useful detail from BoldSign API errors. Their SDK throws
-// HttpError instances whose body has the structured error message.
+// Surface useful detail from BoldSign API errors. The SDK uses axios
+// internally, so error responses come as axios error objects with the
+// useful payload on `response.data`.
 export function extractBoldSignError(err: unknown): string {
-  if (err && typeof err === "object") {
-    const e = err as { body?: unknown; message?: unknown; response?: { body?: unknown } };
-    const body = e.body ?? e.response?.body;
-    if (body) {
-      if (typeof body === "string") return body;
-      try {
-        const parsed = body as { message?: string; error?: string };
-        if (parsed.message) return parsed.message;
-        if (parsed.error) return parsed.error;
-        return JSON.stringify(body);
-      } catch {
-        // fall through
-      }
+  if (!err || typeof err !== "object") return "BoldSign API error";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const e = err as any;
+  const dataCandidates: unknown[] = [
+    e.response?.data,
+    e.response?.body,
+    e.body,
+  ];
+  for (const data of dataCandidates) {
+    if (!data) continue;
+    if (typeof data === "string") return data;
+    if (typeof data === "object") {
+      const d = data as Record<string, unknown>;
+      if (typeof d.message === "string") return d.message as string;
+      if (typeof d.error === "string") return d.error as string;
+      if (typeof d.error_description === "string") return d.error_description as string;
+      // Structured field-level errors
+      if (Array.isArray(d.errors)) return JSON.stringify(d.errors);
+      try { return JSON.stringify(data); } catch { /* noop */ }
     }
-    if (typeof e.message === "string") return e.message;
   }
+  if (typeof e.message === "string") return e.message as string;
   return "BoldSign API error";
 }

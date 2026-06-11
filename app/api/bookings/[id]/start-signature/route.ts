@@ -189,10 +189,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ sign_url: signUrl, document_id: documentId });
   } catch (err) {
     const msg = extractBoldSignError(err);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e = err as any;
     console.error("[start-signature] BoldSign error", {
       bookingId: id,
-      error: msg,
-      raw: err instanceof Error ? err.message : String(err),
+      message: msg,
+      status: e?.response?.status,
+      data: e?.response?.data,
+      headers: e?.response?.headers,
+      sentFieldIds: senderFields.map((f) => f.id),
     });
     return NextResponse.json({ error: msg }, { status: 502 });
   }
