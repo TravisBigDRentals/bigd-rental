@@ -1910,54 +1910,15 @@ function StepSign({
   onSigned: () => void;
   onBack: () => void;
 }) {
+  const [signUrl, setSignUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"loading" | "open" | "finalizing" | "done">("loading");
 
+  // Kick off the signature request — server returns the BoldSign
+  // embedded sign URL which we drop into the iframe below.
   useEffect(() => {
     let cancelled = false;
-    type HelloSignInstance = {
-      open: (url: string, opts?: { testMode?: boolean; skipDomainVerification?: boolean }) => void;
-      on: (event: string, cb: (data?: unknown) => void) => void;
-      close: () => void;
-    };
-    let client: HelloSignInstance | null = null;
-
     (async () => {
-      const clientId = process.env.NEXT_PUBLIC_HELLOSIGN_CLIENT_ID;
-      if (!clientId) {
-        setError("NEXT_PUBLIC_HELLOSIGN_CLIENT_ID is not configured");
-        return;
-      }
-      // Dynamic import: hellosign-embedded touches `window` at module load,
-      // so importing statically breaks Next.js's server bundle.
-      const mod = await import("hellosign-embedded");
-      if (cancelled) return;
-      const HelloSign = mod.default as new (opts: { clientId: string }) => HelloSignInstance;
-      client = new HelloSign({ clientId });
-
-      client.on("sign", async () => {
-        setPhase("finalizing");
-        try {
-          const res = await fetch(`/api/bookings/${bookingId}/finalize-signature`, { method: "POST" });
-          if (!res.ok) {
-            const json = await res.json().catch(() => ({}));
-            setError(json.error ?? "Failed to confirm signature");
-            setPhase("open");
-            return;
-          }
-          setPhase("done");
-          onSigned();
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed to confirm signature");
-          setPhase("open");
-        }
-      });
-
-      client.on("error", (data: unknown) => {
-        const msg = (data as { message?: string } | undefined)?.message;
-        setError(`Signing error: ${msg ?? "unknown"}`);
-      });
-
       try {
         const res = await fetch(`/api/bookings/${bookingId}/start-signature`, { method: "POST" });
         const json = await res.json();
@@ -1966,17 +1927,51 @@ function StepSign({
           setError(json.error ?? "Failed to start signing");
           return;
         }
+        setSignUrl(json.sign_url);
         setPhase("open");
-        client.open(json.sign_url, { testMode: true, skipDomainVerification: true });
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to start signing");
       }
     })();
+    return () => { cancelled = true; };
+  }, [bookingId]);
 
-    return () => {
-      cancelled = true;
-      try { client?.close(); } catch { /* noop */ }
-    };
+  // BoldSign redirects the iframe to /book/[id]/signed-callback when the
+  // renter finishes signing. That page postMessage's up with type
+  // "bigds:boldsign:signed". We catch it here, call finalize-signature
+  // (which polls BoldSign's status), then advance to payment.
+  useEffect(() => {
+    function handle(evt: MessageEvent) {
+      if (!evt.data || typeof evt.data !== "object") return;
+      const data = evt.data as { type?: string; bookingId?: string };
+      if (data.type !== "bigds:boldsign:signed" || data.bookingId !== bookingId) return;
+      setPhase("finalizing");
+      (async () => {
+        try {
+          // Webhook may not have fired yet — retry a few times so the
+          // status flip lands before we ask the user to pay.
+          let lastErr = "Failed to confirm signature";
+          for (let i = 0; i < 5; i++) {
+            const res = await fetch(`/api/bookings/${bookingId}/finalize-signature`, { method: "POST" });
+            if (res.ok) {
+              setPhase("done");
+              onSigned();
+              return;
+            }
+            const json = await res.json().catch(() => ({}));
+            lastErr = json.error ?? lastErr;
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+          setError(lastErr);
+          setPhase("open");
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to confirm signature");
+          setPhase("open");
+        }
+      })();
+    }
+    window.addEventListener("message", handle);
+    return () => window.removeEventListener("message", handle);
   }, [bookingId, onSigned]);
 
   return (
@@ -1999,9 +1994,15 @@ function StepSign({
           Preparing your agreement…
         </div>
       )}
-      {phase === "open" && !error && (
-        <div className="rounded-lg border border-ink/15 bg-paper px-4 py-3 text-sm text-muted">
-          The signing window should be open. If you closed it accidentally, click <strong>Back</strong> then <strong>Continue to sign</strong> to reopen.
+      {phase === "open" && signUrl && !error && (
+        <div className="rounded-lg border border-ink/15 bg-paper overflow-hidden">
+          <iframe
+            src={signUrl}
+            className="w-full"
+            style={{ height: "85vh", minHeight: "640px" }}
+            allow="camera"
+            title="Sign rental agreement"
+          />
         </div>
       )}
       {phase === "finalizing" && (

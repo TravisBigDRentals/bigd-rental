@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { signatureRequestApi } from "@/lib/dropbox-sign/server";
+import { documentApi, extractBoldSignError } from "@/lib/boldsign/client";
 
 export const runtime = "nodejs";
 
 const PathSchema = z.object({ id: z.string().uuid() });
 
-// Server-side verifies the signature actually completed before transitioning
-// the booking to pending_payment — never trust a client claim. The async
-// webhook will independently download and store the signed PDF.
+// Verifies the signature actually completed on BoldSign's side before
+// transitioning the booking to pending_payment — never trust a client
+// claim. The webhook does the heavy lifting of downloading and storing
+// the signed PDF; this route is the synchronous "is it done yet?" check
+// the embedded iframe relies on to advance the customer to payment.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const parsed = PathSchema.safeParse(await params);
   if (!parsed.success) return NextResponse.json({ error: "Invalid booking id" }, { status: 400 });
@@ -29,16 +31,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    const sigApi = signatureRequestApi();
-    const resp = await sigApi.signatureRequestGet(booking.signature_request_id);
-    const signatures = resp.body.signatureRequest?.signatures ?? [];
-    const allSigned = signatures.length > 0 && signatures.every((s) => s.statusCode === "signed");
-
-    if (!allSigned) {
-      return NextResponse.json({ error: "Signature not yet complete" }, { status: 400 });
+    const propsResp = await documentApi().getProperties(booking.signature_request_id);
+    // SDK typings claim Promise<DocumentProperties>; runtime returns the
+    // wrapped response with .body holding the actual properties.
+    const properties = (propsResp as unknown as { body?: { status?: string } }).body
+      ?? (propsResp as unknown as { status?: string });
+    const status = properties.status;
+    // BoldSign DocumentStatus enum values: Sent, InProgress, Completed,
+    // Declined, Revoked, Expired, ApprovalPending, etc. We advance once
+    // the document reaches Completed.
+    if (status !== "Completed") {
+      return NextResponse.json(
+        { error: `Signature not yet complete (status: ${status})` },
+        { status: 400 },
+      );
     }
 
-    // Idempotent — only advance if still in pending_signature
     if (booking.status === "pending_signature") {
       await supabase
         .from("bookings")
@@ -51,7 +59,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Dropbox Sign API error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: extractBoldSignError(err) }, { status: 502 });
   }
 }

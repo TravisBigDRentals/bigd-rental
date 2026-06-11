@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import {
-  signatureRequestApi,
-  embeddedApi,
   templateApi,
+  documentApi,
   templateId,
-  clientId,
-} from "@/lib/dropbox-sign/server";
-import { buildMergeFields, type CustomerLike, type EquipmentLike, type AddonLike } from "@/lib/dropbox-sign/merge-fields";
+  senderEmail,
+  extractBoldSignError,
+} from "@/lib/boldsign/client";
+import { buildSenderFields, type CustomerLike, type EquipmentLike, type AddonLike } from "@/lib/boldsign/merge-fields";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,34 @@ type NestedBooking = {
   equipment: EquipmentLike | null;
   booking_addons: { addon: AddonLike | null }[] | null;
 };
+
+function unwrap<T>(v: T | T[] | null | undefined): T | null {
+  if (!v) return null;
+  return Array.isArray(v) ? v[0] ?? null : v;
+}
+
+// The boldsign SDK declares Promise<T> returns but the runtime hands
+// back the underlying http response with .body holding T. Smooth over
+// both shapes so we can read fields uniformly.
+function unwrapBody<T>(resp: unknown): T {
+  if (resp && typeof resp === "object" && "body" in (resp as Record<string, unknown>)) {
+    return (resp as { body: T }).body;
+  }
+  return resp as T;
+}
+
+async function callbackUrl(bookingId: string): Promise<string> {
+  // Where BoldSign redirects the iframe after the renter signs. We use a
+  // tiny app route that postMessage's the parent and shows a "Done" UI.
+  // NEXT_PUBLIC_SITE_URL is the canonical production URL when set;
+  // otherwise we use the host header for the current deploy.
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL;
+  if (explicit) return `${explicit.replace(/\/$/, "")}/book/${bookingId}/signed-callback`;
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}/book/${bookingId}/signed-callback`;
+}
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const parsed = PathSchema.safeParse(await params);
@@ -55,12 +84,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: error?.message ?? "Booking not found" }, { status: 404 });
   }
   const booking = data as unknown as NestedBooking;
-  // Supabase nested FK selects sometimes return single-FK relations as an
-  // array-of-one rather than a bare object. Defensive unwrap.
-  function unwrap<T>(v: T | T[] | null | undefined): T | null {
-    if (!v) return null;
-    return Array.isArray(v) ? v[0] ?? null : v;
-  }
+
   const customer = unwrap<CustomerLike>(booking.customer as CustomerLike | CustomerLike[] | null);
   const equipment = unwrap<EquipmentLike>(booking.equipment as EquipmentLike | EquipmentLike[] | null);
   if (!customer || !equipment) {
@@ -73,118 +97,92 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .map((ba) => unwrap<AddonLike>(ba.addon as AddonLike | AddonLike[] | null))
     .filter((a): a is AddonLike => !!a);
 
-  const sigApi = signatureRequestApi();
-  const embApi = embeddedApi();
+  const docApi = documentApi();
 
-  // If a signature request already exists for this booking, return a fresh
-  // embedded sign URL for the same request (so refreshing Step 4 doesn't
-  // create duplicate requests).
+  // If a BoldSign document was already created for this booking (e.g.,
+  // customer refreshed Step 4), just fetch a fresh embedded sign URL for
+  // it rather than creating a duplicate document.
   if (booking.signature_request_id) {
     try {
-      const existing = await sigApi.signatureRequestGet(booking.signature_request_id);
-      const signatureId = existing.body.signatureRequest?.signatures?.[0]?.signatureId;
-      if (signatureId) {
-        const emb = await embApi.embeddedSignUrl(signatureId);
-        const signUrl = emb.body.embedded?.signUrl;
-        if (signUrl) return NextResponse.json({ sign_url: signUrl });
-      }
+      const linkResp = await docApi.getEmbeddedSignLink(
+        booking.signature_request_id,
+        customer.email,
+        undefined,
+        undefined,
+        undefined,
+        await callbackUrl(booking.id),
+      );
+      const link = unwrapBody<{ signLink?: string }>(linkResp);
+      const signUrl = link.signLink;
+      if (signUrl) return NextResponse.json({ sign_url: signUrl });
     } catch {
-      // fall through and create a fresh request
+      // fall through and create a fresh document
     }
   }
 
-  // Fetch the template's actual custom-field names and filter our payload to
-  // only fields the template defines. Dropbox Sign rejects the whole request
-  // if we send a name that isn't on the template — and we want adding /
-  // removing fields in the template editor to "just work" without code edits.
-  let templateFieldNames: Set<string> = new Set();
-  try {
-    const tmplResp = await templateApi().templateGet(templateId());
-    const tmplFields = tmplResp.body.template?.customFields ?? [];
-    templateFieldNames = new Set(
-      tmplFields
-        .map((f) => (f as { name?: string }).name)
-        .filter((n): n is string => typeof n === "string" && n.length > 0),
-    );
-  } catch (err) {
-    return NextResponse.json({ error: `Template lookup failed: ${extractError(err)}` }, { status: 502 });
-  }
-
-  // Booking row holds the per-booking DL snapshot (matches the DL
-  // image paths). Prefer the booking snapshot over the customer row's
-  // current values so the signed agreement always reflects what the
-  // customer entered at booking time.
+  // Booking row's DL snapshot wins over the customer row — it's the
+  // value the customer entered at booking time, which is what the
+  // signed agreement should reflect.
   const customerForMerge: CustomerLike = {
     ...customer,
     drivers_license_number: booking.drivers_license_number ?? customer.drivers_license_number ?? null,
     drivers_license_expiry: booking.drivers_license_expiry ?? customer.drivers_license_expiry ?? null,
   };
-  const allFields = buildMergeFields(customerForMerge, booking, equipment, addons);
-  const customFields = allFields.filter((f) => templateFieldNames.has(f.name));
+  const senderFields = buildSenderFields(customerForMerge, booking, equipment, addons);
 
   try {
-    const signerPayload = {
-      // Must match the signer role name defined in the Dropbox Sign template
-      // exactly (case-sensitive). The template was created with "RENTER".
-      role: "RENTER",
-      emailAddress: customer.email,
-      name: `${customer.first_name} ${customer.last_name}`.trim(),
-    };
-    console.log("[start-signature] payload", {
-      bookingId: id,
-      templateId: templateId(),
-      clientId: clientId(),
-      signer: signerPayload,
-      fieldCount: customFields.length,
-    });
-    const resp = await sigApi.signatureRequestCreateEmbeddedWithTemplate({
-      clientId: clientId(),
-      templateIds: [templateId()],
-      subject: `Rental Agreement — ${equipment.name}`,
+    const sendForm = {
+      roles: [
+        {
+          roleIndex: 1,
+          signerRole: "SENDER",
+          signerName: "Big D's Rental Co.",
+          signerEmail: senderEmail(),
+          signerType: "Sender" as const,
+          existingFormFields: senderFields,
+        },
+        {
+          roleIndex: 2,
+          signerRole: "RENTER",
+          signerName: `${customer.first_name} ${customer.last_name}`.trim(),
+          signerEmail: customer.email,
+          signerType: "Signer" as const,
+        },
+      ],
+      title: `Rental Agreement — ${equipment.name}`,
       message: "Please review and sign your equipment rental agreement.",
-      signers: [signerPayload],
-      customFields,
-      testMode: true,
-    });
+      // Embedded flow — we don't want BoldSign to email the customer; the
+      // signing link is presented in our iframe.
+      disableEmails: true,
+    };
 
-    const sigReq = resp.body.signatureRequest;
-    const requestId = sigReq?.signatureRequestId;
-    const signatureId = sigReq?.signatures?.[0]?.signatureId;
-    if (!requestId || !signatureId) {
-      return NextResponse.json({ error: "Dropbox Sign returned no IDs" }, { status: 502 });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sendResp = await templateApi().sendUsingTemplate(templateId(), sendForm as any);
+    const created = unwrapBody<{ documentId?: string }>(sendResp);
+    const documentId = created.documentId;
+    if (!documentId) {
+      return NextResponse.json({ error: "BoldSign returned no document id" }, { status: 502 });
     }
 
     await supabase
       .from("bookings")
-      .update({ signature_request_id: requestId })
+      .update({ signature_request_id: documentId })
       .eq("id", id);
 
-    const emb = await embApi.embeddedSignUrl(signatureId);
-    const signUrl = emb.body.embedded?.signUrl;
-    if (!signUrl) return NextResponse.json({ error: "No embedded sign URL" }, { status: 502 });
+    const linkResp = await docApi.getEmbeddedSignLink(
+      documentId,
+      customer.email,
+      undefined,
+      undefined,
+      undefined,
+      await callbackUrl(id),
+    );
+    const link = unwrapBody<{ signLink?: string }>(linkResp);
+    const signUrl = link.signLink;
+    if (!signUrl) return NextResponse.json({ error: "BoldSign returned no embedded sign URL" }, { status: 502 });
 
-    return NextResponse.json({ sign_url: signUrl });
+    return NextResponse.json({ sign_url: signUrl, document_id: documentId });
   } catch (err) {
-    return NextResponse.json({ error: extractError(err) }, { status: 502 });
+    return NextResponse.json({ error: extractBoldSignError(err) }, { status: 502 });
   }
-}
-
-// The @dropbox/sign SDK throws HttpError instances whose top-level message
-// is just "HTTP request failed". The actually useful detail (validation
-// errors, missing fields, bad template ID, etc.) lives on `.body.error` or
-// `.response.body`. Surface it.
-function extractError(err: unknown): string {
-  if (err && typeof err === "object") {
-    const e = err as { body?: unknown; message?: unknown; statusCode?: unknown };
-    if (e.body) {
-      const body = e.body as { error?: { errorMsg?: string; errorName?: string } };
-      const apiErr = body.error;
-      if (apiErr?.errorMsg) {
-        return apiErr.errorName ? `${apiErr.errorName}: ${apiErr.errorMsg}` : apiErr.errorMsg;
-      }
-      try { return JSON.stringify(e.body); } catch { /* fall through */ }
-    }
-    if (typeof e.message === "string") return e.message;
-  }
-  return "Dropbox Sign API error";
 }

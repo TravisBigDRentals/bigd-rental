@@ -3,56 +3,17 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-// Standalone signing widget used when the admin re-sends a signature
-// link to the customer. Mirrors the Step 4 StepSign component from the
-// booking flow, but without the back/next button — this is reached
-// from an email link, not the multi-step form.
+// Standalone signing widget reached from the admin's "Email signature
+// link" notification. Mirrors the Step 4 StepSign component from the
+// booking flow but renders without the multi-step chrome.
 export function SignPad({ bookingId }: { bookingId: string }) {
+  const [signUrl, setSignUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"loading" | "open" | "finalizing" | "done">("loading");
 
   useEffect(() => {
     let cancelled = false;
-    type HelloSignInstance = {
-      open: (url: string, opts?: { testMode?: boolean; skipDomainVerification?: boolean }) => void;
-      on: (event: string, cb: (data?: unknown) => void) => void;
-      close: () => void;
-    };
-    let client: HelloSignInstance | null = null;
-
     (async () => {
-      const clientId = process.env.NEXT_PUBLIC_HELLOSIGN_CLIENT_ID;
-      if (!clientId) {
-        setError("NEXT_PUBLIC_HELLOSIGN_CLIENT_ID is not configured");
-        return;
-      }
-      const mod = await import("hellosign-embedded");
-      if (cancelled) return;
-      const HelloSign = mod.default as new (opts: { clientId: string }) => HelloSignInstance;
-      client = new HelloSign({ clientId });
-
-      client.on("sign", async () => {
-        setPhase("finalizing");
-        try {
-          const res = await fetch(`/api/bookings/${bookingId}/finalize-signature`, { method: "POST" });
-          if (!res.ok) {
-            const json = await res.json().catch(() => ({}));
-            setError(json.error ?? "Failed to confirm signature");
-            setPhase("open");
-            return;
-          }
-          setPhase("done");
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed to confirm signature");
-          setPhase("open");
-        }
-      });
-
-      client.on("error", (data: unknown) => {
-        const msg = (data as { message?: string } | undefined)?.message;
-        setError(`Signing error: ${msg ?? "unknown"}`);
-      });
-
       try {
         const res = await fetch(`/api/bookings/${bookingId}/start-signature`, { method: "POST" });
         const json = await res.json();
@@ -61,31 +22,50 @@ export function SignPad({ bookingId }: { bookingId: string }) {
           setError(json.error ?? "Failed to start signing");
           return;
         }
+        setSignUrl(json.sign_url);
         setPhase("open");
-        client.open(json.sign_url, { testMode: true, skipDomainVerification: true });
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to start signing");
       }
     })();
-
-    return () => {
-      cancelled = true;
-      try { client?.close(); } catch { /* noop */ }
-    };
+    return () => { cancelled = true; };
   }, [bookingId]);
 
-  function reopen() {
-    setPhase("loading");
-    setError(null);
-    // Force re-mount of the effect by toggling a key — simplest is
-    // a page reload here, since the effect captures bookingId only.
-    window.location.reload();
-  }
+  useEffect(() => {
+    function handle(evt: MessageEvent) {
+      if (!evt.data || typeof evt.data !== "object") return;
+      const data = evt.data as { type?: string; bookingId?: string };
+      if (data.type !== "bigds:boldsign:signed" || data.bookingId !== bookingId) return;
+      setPhase("finalizing");
+      (async () => {
+        try {
+          let lastErr = "Failed to confirm signature";
+          for (let i = 0; i < 5; i++) {
+            const res = await fetch(`/api/bookings/${bookingId}/finalize-signature`, { method: "POST" });
+            if (res.ok) {
+              setPhase("done");
+              return;
+            }
+            const json = await res.json().catch(() => ({}));
+            lastErr = json.error ?? lastErr;
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+          setError(lastErr);
+          setPhase("open");
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to confirm signature");
+          setPhase("open");
+        }
+      })();
+    }
+    window.addEventListener("message", handle);
+    return () => window.removeEventListener("message", handle);
+  }, [bookingId]);
 
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted">
-        The agreement will open in a signing window. Review carefully, sign at the bottom, and submit.
+        Review the agreement carefully, sign at the bottom, and submit.
       </p>
 
       {error && (
@@ -98,12 +78,15 @@ export function SignPad({ bookingId }: { bookingId: string }) {
           Preparing your agreement…
         </div>
       )}
-      {phase === "open" && !error && (
-        <div className="rounded-lg border border-ink/15 bg-paper px-4 py-3 text-sm text-muted">
-          The signing window should be open. If you closed it accidentally,{" "}
-          <button type="button" onClick={reopen} className="underline text-accent">
-            click here to reopen it
-          </button>.
+      {phase === "open" && signUrl && !error && (
+        <div className="rounded-lg border border-ink/15 bg-paper overflow-hidden">
+          <iframe
+            src={signUrl}
+            className="w-full"
+            style={{ height: "85vh", minHeight: "640px" }}
+            allow="camera"
+            title="Sign rental agreement"
+          />
         </div>
       )}
       {phase === "finalizing" && (
