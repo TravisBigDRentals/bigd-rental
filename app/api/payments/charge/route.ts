@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { getSquareClient, squareLocationId } from "@/lib/square/server";
 import { sendBookingConfirmationEmailIfReady } from "@/lib/email/booking-confirmation";
 import { findBlockingBookings } from "@/lib/bookings/availability";
+import { sendAgreementByEmail } from "@/lib/boldsign/send-by-email";
 
 export const runtime = "nodejs";
 
@@ -125,12 +126,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: updErr.message }, { status: 500 });
   }
 
-  // Send confirmation email if BOTH payment AND signed PDF are ready. If the
-  // signed-PDF webhook hasn't fired yet, this is a no-op; the webhook handler
-  // will dispatch instead. AWAITED here — fire-and-forget doesn't survive in
-  // Vercel serverless (the lambda dies right after `return`, killing the
-  // in-flight Resend call). Caught so a Resend failure doesn't break the
-  // payment response — payment already succeeded by this point.
+  // We're operating in "agreement after payment" mode while the
+  // embedded BoldSign flow is being validated. Fire the agreement off
+  // to the customer via email — they sign on BoldSign's hosted page
+  // at their leisure; the existing webhook + email pipeline takes
+  // over from there.
+  try {
+    const agreementRes = await sendAgreementByEmail(booking_id);
+    if (agreementRes.ok) console.log(`[boldsign] sent agreement ${agreementRes.documentId}`);
+    else console.error(`[boldsign] failed to send agreement: ${agreementRes.error}`);
+  } catch (e) {
+    console.error("[boldsign] send-by-email threw:", e);
+  }
+
+  // Confirmation email is gated on BOTH payment AND signed PDF — at
+  // this point we have payment but the signed PDF won't exist until
+  // the customer clicks the BoldSign email link and signs. That's
+  // fine; the BoldSign webhook will trigger the confirmation email
+  // once the signed PDF lands.
   try {
     const emailRes = await sendBookingConfirmationEmailIfReady(booking_id);
     if (emailRes.sent) console.log(`[email] payment-success: sent ${emailRes.messageId}`);
