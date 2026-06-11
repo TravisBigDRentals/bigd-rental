@@ -13,13 +13,13 @@ export async function SiteNav() {
   // Marketing pages live on the WordPress site (sg-host.com); RENT is
   // the only internal route. External links use a plain <a> so we don't
   // hand Next.js routes a non-app URL.
-  const MARKETING_HOME = "http://rohitb256.sg-host.com";
+  const MARKETING_HOME = "https://bigdrentals.ca";
   const links = [
     { label: "HOME", href: MARKETING_HOME, external: true },
-    { label: "ABOUT", href: "https://rohitb256.sg-host.com/about/", external: true },
+    { label: "ABOUT", href: "https://bigdrentals.ca/about/", external: true },
     { label: "RENT", href: "/book", external: false },
-    { label: "APPAREL", href: "https://rohitb256.sg-host.com/shop/", external: true },
-    { label: "CONTACT", href: "https://rohitb256.sg-host.com/contact/", external: true },
+    { label: "APPAREL", href: "https://bigdrentals.ca/shop/", external: true },
+    { label: "CONTACT", href: "https://bigdrentals.ca/contact/", external: true },
   ];
 
   return (

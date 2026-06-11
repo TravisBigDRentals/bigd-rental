@@ -6,12 +6,12 @@ import Link from "next/link";
 export function SiteFooter() {
   // Marketing pages live on the WordPress site; only this app's
   // booking pages are internal routes.
-  const MARKETING_HOME = "http://rohitb256.sg-host.com";
+  const MARKETING_HOME = "https://bigdrentals.ca";
   const navLinks = [
     { label: "Home", href: MARKETING_HOME },
-    { label: "About", href: "https://rohitb256.sg-host.com/about/" },
-    { label: "Apparel", href: "https://rohitb256.sg-host.com/shop/" },
-    { label: "Contact", href: "https://rohitb256.sg-host.com/contact/" },
+    { label: "About", href: "https://bigdrentals.ca/about/" },
+    { label: "Apparel", href: "https://bigdrentals.ca/shop/" },
+    { label: "Contact", href: "https://bigdrentals.ca/contact/" },
   ];
 
   return (
