@@ -10,14 +10,13 @@ export async function SiteNav() {
   const { data: { user } } = await supabase.auth.getUser();
   const signedIn = !!user;
 
-  // Marketing pages live on the WordPress site (sg-host.com); RENT is
-  // the only internal route. External links use a plain <a> so we don't
-  // hand Next.js routes a non-app URL.
+  // Marketing pages live on the WordPress site. The booking flow is
+  // reached via the orange RENT button on the right — no text-link
+  // entry needed in the nav list itself.
   const MARKETING_HOME = "https://bigdrentals.ca";
   const links = [
     { label: "HOME", href: MARKETING_HOME, external: true },
     { label: "ABOUT", href: "https://bigdrentals.ca/about/", external: true },
-    { label: "RENT", href: "/book", external: false },
     { label: "APPAREL", href: "https://bigdrentals.ca/shop/", external: true },
     { label: "CONTACT", href: "https://bigdrentals.ca/contact/", external: true },
   ];
