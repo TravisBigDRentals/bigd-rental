@@ -188,19 +188,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     // SENDER role just means "fields pre-filled by the API caller".
     // We model that as a Signer role with all its fields pre-filled
     // via existingFormFields; BoldSign treats it as already done.
+    // Mark every SENDER field as ReadOnly so BoldSign knows nothing
+    // is left for SENDER to fill — combined with signerOrder=1, BoldSign
+    // auto-completes SENDER first and only RENTER needs to sign in the
+    // iframe. (Reviewer doesn't work — "Reviewer should not have any form
+    // fields"; Signer with editable fields would wait for SENDER input.)
+    const senderFieldsReadOnly = senderFields.map((f) => ({ ...f, isReadOnly: true }));
     const sendForm = {
       roles: [
         {
-          // SENDER role only carries pre-filled textboxes — no signature.
-          // Using "Reviewer" so BoldSign doesn't sit waiting for SENDER
-          // to "sign". A Reviewer needs to view + approve, not draw a
-          // signature; with all their fields pre-filled they auto-complete.
           roleIndex: 1,
           signerRole: "SENDER",
           signerName: "Big D's Rental Co.",
           signerEmail: senderEmail(),
-          signerType: "Reviewer",
-          existingFormFields: senderFields,
+          signerType: "Signer",
+          signerOrder: 1,
+          existingFormFields: senderFieldsReadOnly,
         },
         {
           roleIndex: 2,
@@ -208,8 +211,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           signerName: `${customer.first_name} ${customer.last_name}`.trim(),
           signerEmail: customer.email,
           signerType: "Signer",
+          signerOrder: 2,
         },
       ],
+      enableSigningOrder: true,
       title: `Rental Agreement — ${equipment.name}`,
       message: "Please review and sign your equipment rental agreement.",
       // Embedded flow — we don't want BoldSign to email the customer; the
