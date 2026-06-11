@@ -128,7 +128,34 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     drivers_license_number: booking.drivers_license_number ?? customer.drivers_license_number ?? null,
     drivers_license_expiry: booking.drivers_license_expiry ?? customer.drivers_license_expiry ?? null,
   };
-  const senderFields = buildSenderFields(customerForMerge, booking, equipment, addons);
+  const candidateSenderFields = buildSenderFields(customerForMerge, booking, equipment, addons);
+
+  // Fetch the template's actual field list. BoldSign rejects the send
+  // with "field count exceeds existing field count" if we hand it any
+  // id that isn't on the template, so we filter our merge payload down
+  // to exactly the ids the template has on the SENDER role.
+  let senderFields: typeof candidateSenderFields = candidateSenderFields;
+  try {
+    const tmplResp = await templateApi().getProperties(templateId());
+    const tmpl = unwrapBody<{
+      roles?: Array<{ name?: string | null; formFields?: Array<{ id?: string | null }> | null }>;
+    }>(tmplResp);
+    const senderRole = (tmpl.roles ?? []).find(
+      (r) => (r.name ?? "").toUpperCase() === "SENDER",
+    );
+    const validIds = new Set(
+      (senderRole?.formFields ?? [])
+        .map((f) => f.id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    );
+    senderFields = candidateSenderFields.filter((f) => validIds.has(f.id));
+  } catch (err) {
+    console.error("[start-signature] template fetch failed", {
+      error: extractBoldSignError(err),
+    });
+    // Fall through and try sending everything anyway; if BoldSign 400s
+    // we surface the error to the customer like before.
+  }
 
   try {
     // BoldSign's signerType enum only allows Signer / Reviewer /
