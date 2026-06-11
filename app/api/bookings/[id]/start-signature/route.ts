@@ -191,11 +191,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const sendForm = {
       roles: [
         {
+          // SENDER role only carries pre-filled textboxes — no signature.
+          // Using "Reviewer" so BoldSign doesn't sit waiting for SENDER
+          // to "sign". A Reviewer needs to view + approve, not draw a
+          // signature; with all their fields pre-filled they auto-complete.
           roleIndex: 1,
           signerRole: "SENDER",
           signerName: "Big D's Rental Co.",
           signerEmail: senderEmail(),
-          signerType: "Signer",
+          signerType: "Reviewer",
           existingFormFields: senderFields,
         },
         {
