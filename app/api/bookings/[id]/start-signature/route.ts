@@ -138,17 +138,38 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   try {
     const tmplResp = await templateApi().getProperties(templateId());
     const tmpl = unwrapBody<{
-      roles?: Array<{ name?: string | null; formFields?: Array<{ id?: string | null }> | null }>;
+      roles?: Array<{
+        name?: string | null;
+        formFields?: Array<{ id?: string | null; fieldType?: string | null; type?: string | null }> | null;
+      }>;
     }>(tmplResp);
     const senderRole = (tmpl.roles ?? []).find(
       (r) => (r.name ?? "").toUpperCase() === "SENDER",
     );
-    const validIds = new Set(
+    // Field types BoldSign refuses to pre-fill via API. Signature /
+    // Initial are filled by the signer in the iframe; FormulaField is
+    // computed; DateSigned auto-fills when the signer completes;
+    // Drawing is freehand.
+    const UNFILLABLE = new Set([
+      "Signature",
+      "Initial",
+      "Initials",
+      "Formula",
+      "FormulaField",
+      "Drawing",
+      "DateSigned",
+      "SignedDate",
+    ]);
+    const fillableIds = new Set(
       (senderRole?.formFields ?? [])
+        .filter((f) => {
+          const t = (f.fieldType ?? f.type ?? "").toString();
+          return !UNFILLABLE.has(t);
+        })
         .map((f) => f.id)
         .filter((id): id is string => typeof id === "string" && id.length > 0),
     );
-    senderFields = candidateSenderFields.filter((f) => validIds.has(f.id));
+    senderFields = candidateSenderFields.filter((f) => fillableIds.has(f.id));
   } catch (err) {
     console.error("[start-signature] template fetch failed", {
       error: extractBoldSignError(err),
