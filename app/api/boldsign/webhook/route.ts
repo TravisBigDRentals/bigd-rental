@@ -91,21 +91,29 @@ async function handleCompleted(documentId: string): Promise<{ ok: true; sent: bo
   return { ok: true, sent: result.sent };
 }
 
+// BoldSign also pings this URL with an empty/minimal POST when you
+// click "Verify" in the webhook setup dialog. Accept those (and any
+// future keepalive variants) with 200 instead of failing them.
+export async function GET() {
+  return NextResponse.json({ ok: true, ready: true });
+}
+
 export async function POST(req: Request) {
-  // Raw body first so future HMAC verification works against the exact
-  // bytes BoldSign signed.
   const raw = await req.text();
+  if (!raw || raw.trim().length === 0) {
+    return NextResponse.json({ ok: true, verification: true });
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    // Non-JSON body — likely a verification ping. Acknowledge so the
+    // BoldSign dashboard doesn't refuse to save the webhook.
+    return NextResponse.json({ ok: true, verification: true });
   }
 
   const { eventType, documentId } = extractEvent(parsed);
   if (!documentId) {
-    // Acknowledge unrelated/keepalive events with 200 so BoldSign
-    // doesn't retry indefinitely.
     return NextResponse.json({ ok: true, ignored: "no document id" });
   }
 
