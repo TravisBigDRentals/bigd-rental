@@ -2117,9 +2117,6 @@ function StepPay({
           className="rounded-full border border-ink/15 px-6 py-3 font-medium hover:bg-ink/5 disabled:opacity-50 transition-colors">
           ← Back
         </button>
-        <p className="font-mono text-xs text-muted">
-          Sandbox test card: 4111 1111 1111 1111 · any future expiry · CVV 111
-        </p>
       </div>
     </section>
   );
