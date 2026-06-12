@@ -24,6 +24,12 @@ function isoToDate(iso: string): Date {
   return new Date(iso + "T00:00:00");
 }
 
+function tomorrowISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return dateToISO(d);
+}
+
 type Step = 1 | 2 | 3 | 4 | 5;
 type DropoffTime = "8:00 AM" | "10:00 AM";
 
@@ -632,6 +638,7 @@ export function BookingForm({
     if (!customer.drivers_license_back_path) return setError("Driver's license (back) is required");
     if (!customer.drivers_license_number.trim()) return setError("Driver's license number is required");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(customer.drivers_license_expiry)) return setError("Driver's license expiry date is required");
+    if (customer.drivers_license_expiry < tomorrowISO()) return setError("Driver's license must not be expired or expiring today");
     if (!customer.customer_address_line1.trim()) return setError("Customer address is required");
     if (!customer.customer_city.trim()) return setError("Customer city is required");
     if (!customer.customer_province.trim()) return setError("Customer province is required");
@@ -1522,6 +1529,7 @@ function StepCustomer(props: {
           <Field label="License expiry *">
             <input type="date" value={customer.drivers_license_expiry}
               onChange={(e) => updateCustomer("drivers_license_expiry", e.target.value)}
+              min={tomorrowISO()}
               className="mt-1 w-full rounded-lg border border-ink/15 bg-paper px-3 py-2"
               required />
           </Field>
