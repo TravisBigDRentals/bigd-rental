@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { Resend } from "resend";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { firstAdminEmail } from "@/lib/admin/emails";
 
 export const runtime = "nodejs";
 
@@ -68,7 +69,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const from = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
   const isSandbox = (process.env.SQUARE_ENVIRONMENT ?? "sandbox") !== "production";
-  const adminEmail = process.env.BIGDS_ADMIN_EMAIL?.toLowerCase() || undefined;
+  const adminEmail = firstAdminEmail();
   const intendedRecipient = customer.email.toLowerCase();
   const recipient = isSandbox ? (adminEmail ?? intendedRecipient) : intendedRecipient;
   const subjectPrefix = isSandbox ? "[TEST] " : "";

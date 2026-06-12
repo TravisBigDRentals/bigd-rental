@@ -2,6 +2,7 @@ import "server-only";
 import { Resend } from "resend";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatCents } from "@/lib/pricing";
+import { adminEmailList, firstAdminEmail } from "@/lib/admin/emails";
 
 type Customer = {
   first_name: string;
@@ -103,9 +104,10 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const from = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
-  // Normalize to lowercase. Resend's test-mode whitelist match is
-  // case-sensitive, and the env var's casing is too easy to get wrong.
-  const adminCc = process.env.BIGDS_ADMIN_EMAIL?.toLowerCase() || undefined;
+  // BIGDS_ADMIN_EMAIL is comma-separated — fan out so every listed
+  // admin gets cc'd on the confirmation and the operational alert.
+  const adminEmails = adminEmailList();
+  const sandboxRedirectTarget = firstAdminEmail();
 
   const addressLine = [customer.project_address_line1, customer.project_city, customer.project_province, customer.project_postal_code]
     .filter(Boolean)
@@ -113,13 +115,13 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
 
   // Sandbox redirect: while in test mode, Resend's onboarding@resend.dev
   // sender only delivers to the Resend account owner. Override the actual
-  // recipient to BIGDS_ADMIN_EMAIL so every dev email lands somewhere
-  // useful, regardless of what the test customer typed. Production
-  // (SQUARE_ENVIRONMENT=production) sends to the real customer.
+  // recipient to the first BIGDS_ADMIN_EMAIL so every dev email lands
+  // somewhere useful, regardless of what the test customer typed.
+  // Production (SQUARE_ENVIRONMENT=production) sends to the real customer.
   const isSandbox = (process.env.SQUARE_ENVIRONMENT ?? "sandbox") !== "production";
   const intendedRecipient = customer.email.toLowerCase();
-  const recipient = isSandbox ? (adminCc ?? intendedRecipient) : intendedRecipient;
-  const cc = isSandbox ? undefined : adminCc;
+  const recipient = isSandbox ? (sandboxRedirectTarget ?? intendedRecipient) : intendedRecipient;
+  const cc = isSandbox ? undefined : (adminEmails.length > 0 ? adminEmails : undefined);
   const subjectPrefix = isSandbox ? "[TEST] " : "";
   const sandboxNotice = isSandbox
     ? `<div style="background:#FFF7E5; border:1px solid #F2C461; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#8A5A00;">
@@ -160,17 +162,17 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
   }
 
   // Admin notification — separate operations-focused email with the PDF.
-  // Goes to BIGDS_ADMIN_EMAIL (in sandbox that's the same inbox the customer
-  // email got redirected to; in production it's Big D's real ops address).
-  // Don't roll back the customer claim if this one fails — customer email
-  // already succeeded.
-  if (adminCc) {
+  // Goes to every address in BIGDS_ADMIN_EMAIL (in sandbox that's the
+  // same inbox(es) the customer email got redirected to; in production
+  // it's Big D's real ops addresses). Don't roll back the customer
+  // claim if this one fails — customer email already succeeded.
+  if (adminEmails.length > 0) {
     const customerAddressLine = [customer.customer_address_line1, customer.customer_city, customer.customer_province, customer.customer_postal_code]
       .filter(Boolean)
       .join(", ");
     const adminResult = await resend.emails.send({
       from: `Big D's Rental Bookings <${from}>`,
-      to: adminCc,
+      to: adminEmails,
       subject: `${subjectPrefix}New booking · ${equipment.name} · ${customer.first_name} ${customer.last_name} · ${booking.start_date}`,
       html: sandboxNotice + adminHtmlBody({
         customerFirstName: customer.first_name,

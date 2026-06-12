@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { formatCents } from "@/lib/pricing";
+import { firstAdminEmail } from "@/lib/admin/emails";
 
 type Customer = { first_name: string; email: string };
 type Equipment = { name: string };
@@ -17,7 +18,7 @@ export async function sendBookingCanceledEmail(opts: {
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const from = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
   const isSandbox = (process.env.SQUARE_ENVIRONMENT ?? "sandbox") !== "production";
-  const adminEmail = process.env.BIGDS_ADMIN_EMAIL?.toLowerCase() || undefined;
+  const adminEmail = firstAdminEmail();
   const intendedRecipient = opts.customer.email.toLowerCase();
   const recipient = isSandbox ? (adminEmail ?? intendedRecipient) : intendedRecipient;
   const subjectPrefix = isSandbox ? "[TEST] " : "";

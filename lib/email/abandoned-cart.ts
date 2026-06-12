@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { firstAdminEmail } from "@/lib/admin/emails";
 
 type BookingRow = {
   id: string;
@@ -55,7 +56,7 @@ export async function sendAbandonedCartEmailIfDue(
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const from = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
   const isSandbox = (process.env.SQUARE_ENVIRONMENT ?? "sandbox") !== "production";
-  const adminEmail = process.env.BIGDS_ADMIN_EMAIL?.toLowerCase() || undefined;
+  const adminEmail = firstAdminEmail();
   const intendedRecipient = customer.email.toLowerCase();
   const recipient = isSandbox ? (adminEmail ?? intendedRecipient) : intendedRecipient;
   const subjectPrefix = isSandbox ? "[TEST] " : "";
