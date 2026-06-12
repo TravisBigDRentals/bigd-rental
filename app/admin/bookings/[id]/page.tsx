@@ -4,6 +4,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { formatCents } from "@/lib/pricing";
 import { ResendSignatureButton } from "./resend-signature-button";
 import { CancelBookingButton } from "./cancel-booking-button";
+import { StagePanel } from "./stage-panel";
 
 export const metadata = {
   title: "Booking detail — Big D's Admin",
@@ -64,6 +65,8 @@ type BookingDetail = {
   drivers_license_expiry: string | null;
   delivered_at: string | null;
   returned_at: string | null;
+  delivery_photo_urls: string[] | null;
+  return_photo_urls: string[] | null;
   created_at: string;
   customer: Customer | null;
   equipment: Equipment | null;
@@ -94,6 +97,22 @@ async function signedAgreementUrl(path: string | null): Promise<string | null> {
   return data?.signedUrl ?? null;
 }
 
+// Mint signed URLs for an array of condition-photo paths so they can be
+// rendered as <img> thumbnails on the admin page. Errors fall through
+// to an empty url string; the panel shows a "Saved" placeholder.
+async function signedConditionPhotos(paths: string[] | null): Promise<{ path: string; url: string }[]> {
+  if (!paths || paths.length === 0) return [];
+  const supabase = createSupabaseServiceClient();
+  return Promise.all(
+    paths.map(async (path) => {
+      const { data } = await supabase.storage
+        .from("condition-photos")
+        .createSignedUrl(path, 60 * 60);
+      return { path, url: data?.signedUrl ?? "" };
+    }),
+  );
+}
+
 export default async function BookingDetailPage({
   params,
 }: {
@@ -110,7 +129,7 @@ export default async function BookingDetailPage({
       canceled_at, canceled_reason, refund_id, refund_amount_cents,
       drivers_license_front_url, drivers_license_back_url,
       drivers_license_number, drivers_license_expiry,
-      delivered_at, returned_at, created_at,
+      delivered_at, returned_at, delivery_photo_urls, return_photo_urls, created_at,
       customer:customer_id ( first_name, last_name, business_name, email, phone, drivers_license_front_url, drivers_license_back_url, drivers_license_number, drivers_license_expiry, customer_address_line1, customer_address_line2, customer_city, customer_province, customer_postal_code, project_address_line1, project_address_line2, project_city, project_province, project_postal_code ),
       equipment:equipment_id ( name, serial ),
       extra_equipment:extra_equipment_id ( name, serial ),
@@ -128,10 +147,12 @@ export default async function BookingDetailPage({
   // historical bookings created before the snapshot was wired up.
   const dlFrontPath = booking.drivers_license_front_url ?? booking.customer?.drivers_license_front_url ?? null;
   const dlBackPath = booking.drivers_license_back_url ?? booking.customer?.drivers_license_back_url ?? null;
-  const [dlFrontUrl, dlBackUrl, signedAgreementHref] = await Promise.all([
+  const [dlFrontUrl, dlBackUrl, signedAgreementHref, deliveryPhotos, returnPhotos] = await Promise.all([
     signedDlUrl(dlFrontPath),
     signedDlUrl(dlBackPath),
     signedAgreementUrl(booking.signed_agreement_pdf_url),
+    signedConditionPhotos(booking.delivery_photo_urls),
+    signedConditionPhotos(booking.return_photo_urls),
   ]);
 
   const customer = booking.customer;
@@ -332,10 +353,24 @@ export default async function BookingDetailPage({
           <Step label="Delivered" timestamp={booking.delivered_at} />
           <Step label="Returned" timestamp={booking.returned_at} />
         </ol>
-        <p className="mt-4 font-mono text-xs text-muted">
-          Delivery + return workflows ship in Phase 6.
-        </p>
       </section>
+
+      {booking.status !== "canceled" && (
+        <>
+          <StagePanel
+            bookingId={booking.id}
+            stage="delivered"
+            initialTimestamp={booking.delivered_at}
+            initialPhotos={deliveryPhotos}
+          />
+          <StagePanel
+            bookingId={booking.id}
+            stage="returned"
+            initialTimestamp={booking.returned_at}
+            initialPhotos={returnPhotos}
+          />
+        </>
+      )}
 
       {booking.status !== "canceled" && (
         <section className="mt-8 rounded-2xl border border-red-200 bg-red-50/40 p-5 flex items-start justify-between gap-4">
