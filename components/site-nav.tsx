@@ -17,7 +17,6 @@ export async function SiteNav() {
   const links = [
     { label: "HOME", href: MARKETING_HOME, external: true },
     { label: "ABOUT", href: "https://bigdrentals.ca/about/", external: true },
-    { label: "APPAREL", href: "https://bigdrentals.ca/shop/", external: true },
     { label: "CONTACT", href: "https://bigdrentals.ca/contact/", external: true },
   ];
 

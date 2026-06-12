@@ -10,7 +10,6 @@ export function SiteFooter() {
   const navLinks = [
     { label: "Home", href: MARKETING_HOME },
     { label: "About", href: "https://bigdrentals.ca/about/" },
-    { label: "Apparel", href: "https://bigdrentals.ca/shop/" },
     { label: "Contact", href: "https://bigdrentals.ca/contact/" },
   ];
 
