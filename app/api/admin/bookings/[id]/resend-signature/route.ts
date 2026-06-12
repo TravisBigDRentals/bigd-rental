@@ -98,11 +98,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       html,
     });
     if (result.error) {
+      console.error("[admin/resend-signature] resend rejected", {
+        bookingId: id,
+        from,
+        to: recipient,
+        error: result.error,
+      });
       return NextResponse.json({ error: result.error.message }, { status: 502 });
     }
     return NextResponse.json({ ok: true, sent_to: recipient, message_id: result.data?.id });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Email send failed";
+    console.error("[admin/resend-signature] threw", { bookingId: id, from, to: recipient, error: msg });
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
