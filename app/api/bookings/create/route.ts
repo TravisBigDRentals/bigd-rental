@@ -265,6 +265,8 @@ export async function POST(req: Request) {
       liability_waiver_cents: pricing.liabilityWaiverCents,
       coupon_id: coupon?.id ?? null,
       discount_cents: pricing.discountCents,
+      tax_cents: pricing.taxCents,
+      tax_rate: pricing.taxRate,
       drivers_license_front_url: customer.drivers_license_front_path,
       drivers_license_back_url: customer.drivers_license_back_path,
       drivers_license_number: customer.drivers_license_number,

@@ -1,7 +1,7 @@
 "use client";
 
 import type { Addon, Equipment } from "@/lib/bookings/queries";
-import { computeDiscountCents, formatCents, rentalDays, selectEquipmentTier, LIABILITY_WAIVER_CENTS, type Discount, type PricingTier } from "@/lib/pricing";
+import { computeDiscountCents, formatCents, rentalDays, selectEquipmentTier, LIABILITY_WAIVER_CENTS, GST_RATE, type Discount, type PricingTier } from "@/lib/pricing";
 
 type PricingProps = {
   equipment: Equipment | null;
@@ -60,12 +60,18 @@ function computeTotals({ equipment, extraEquipment, startDate, endDate, selected
   // Waiver is flat, not tied to days, and NOT discountable. Always
   // shown if opted in (even before dates are picked).
   const waiverCents = liabilityWaiver ? LIABILITY_WAIVER_CENTS : 0;
+  // GST applies to (subtotal − discount) + waiver. Only display once
+  // dates are picked — before that the subtotal is zero and a "GST
+  // $0.00" line is noise.
+  const preTax = Math.max(0, subtotal - discountCents) + waiverCents;
+  const taxCents = haveDates ? Math.round(preTax * GST_RATE) : 0;
   return {
     days, haveDates, equipmentSubtotal, extraSubtotal, addonsSubtotal,
     tier, extraTier,
     discountCents,
     waiverCents,
-    total: Math.max(0, subtotal - discountCents) + waiverCents,
+    taxCents,
+    total: preTax + taxCents,
   };
 }
 
@@ -83,7 +89,7 @@ function tierLabel(tier: PricingTier, equipment: { daily_rate_cents: number; wee
 // sees only one item per column and sticky context works correctly.
 export function PricingWidget(props: PricingProps) {
   const { equipment, extraEquipment, selectedAddons, appliedCoupon, nextLabel, nextDisabled, onNext, loading } = props;
-  const { days, haveDates, equipmentSubtotal, extraSubtotal, extraTier, tier, discountCents, waiverCents, total } = computeTotals(props);
+  const { days, haveDates, equipmentSubtotal, extraSubtotal, extraTier, tier, discountCents, waiverCents, taxCents, total } = computeTotals(props);
 
   return (
     <aside className="hidden lg:block lg:sticky lg:top-24 self-start">
@@ -167,6 +173,16 @@ export function PricingWidget(props: PricingProps) {
               <span className="font-mono text-xs text-muted">(flat)</span>
             </span>
             <span className="font-mono whitespace-nowrap font-semibold">{formatCents(waiverCents)}</span>
+          </div>
+        )}
+
+        {haveDates && taxCents > 0 && (
+          <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+            <span>
+              GST{" "}
+              <span className="font-mono text-xs text-muted">(5%)</span>
+            </span>
+            <span className="font-mono whitespace-nowrap font-semibold">{formatCents(taxCents)}</span>
           </div>
         )}
 

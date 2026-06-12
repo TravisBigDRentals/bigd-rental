@@ -29,6 +29,8 @@ type BookingRow = {
   end_date: string;
   dropoff_time: string | null;
   total_cents: number;
+  tax_cents: number;
+  tax_rate: number;
   status: string;
   signed_agreement_pdf_url: string | null;
   email_sent_at: string | null;
@@ -54,7 +56,7 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
   const { data, error } = await supabase
     .from("bookings")
     .select(`
-      id, start_date, end_date, dropoff_time, total_cents, status,
+      id, start_date, end_date, dropoff_time, total_cents, tax_cents, tax_rate, status,
       signed_agreement_pdf_url, email_sent_at,
       equipment:equipment_id ( name, serial ),
       customer:customer_id ( first_name, last_name, business_name, email, phone, project_address_line1, project_city, project_province, project_postal_code, customer_address_line1, customer_city, customer_province, customer_postal_code ),
@@ -143,6 +145,8 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
       dropoffTime: booking.dropoff_time,
       addressLine,
       totalCents: booking.total_cents,
+      taxCents: booking.tax_cents,
+      taxRate: booking.tax_rate,
       bookingId: booking.id,
       addons,
     }),
@@ -182,6 +186,8 @@ export async function sendBookingConfirmationEmailIfReady(bookingId: string): Pr
         dropoffTime: booking.dropoff_time,
         projectAddressLine: addressLine,
         totalCents: booking.total_cents,
+        taxCents: booking.tax_cents,
+        taxRate: booking.tax_rate,
         bookingId: booking.id,
         addons,
       }),
@@ -209,6 +215,8 @@ function adminHtmlBody(v: {
   dropoffTime: string | null;
   projectAddressLine: string;
   totalCents: number;
+  taxCents: number;
+  taxRate: number;
   bookingId: string;
   addons: AddonRow[];
 }): string {
@@ -251,6 +259,7 @@ function adminHtmlBody(v: {
 
       <h2 style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: #7A766F; margin: 24px 0 8px;">Payment</h2>
       <table style="width: 100%; border-collapse: collapse;">
+        ${v.taxCents > 0 ? `<tr><td style="padding: 6px 0; color: #7A766F; width: 35%;">GST (${Math.round(v.taxRate * 100)}%)</td><td style="padding: 6px 0;">${formatCents(v.taxCents)} CAD</td></tr>` : ""}
         <tr><td style="padding: 6px 0; color: #7A766F; width: 35%;">Total</td><td style="padding: 6px 0; font-weight: 600;">${formatCents(v.totalCents)} CAD</td></tr>
       </table>
 
@@ -282,6 +291,8 @@ function htmlBody(v: {
   dropoffTime: string | null;
   addressLine: string;
   totalCents: number;
+  taxCents: number;
+  taxRate: number;
   bookingId: string;
   addons: AddonRow[];
 }): string {
@@ -303,6 +314,7 @@ function htmlBody(v: {
         <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Delivery</td><td style="padding: 8px 0; text-align: right;">${v.startDate}${v.dropoffTime ? ` at ${v.dropoffTime}` : ""}</td></tr>
         <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Pickup</td><td style="padding: 8px 0; text-align: right;">${v.endDate}${v.dropoffTime ? ` at ${v.dropoffTime}` : ""}</td></tr>
         <tr><td style="padding: 8px 0; color: #7A766F; vertical-align: top;">Project address</td><td style="padding: 8px 0; text-align: right;">${escapeHtml(v.addressLine) || "—"}</td></tr>
+        ${v.taxCents > 0 ? `<tr><td style="padding: 8px 0; color: #7A766F;">Includes GST (${Math.round(v.taxRate * 100)}%)</td><td style="padding: 8px 0; text-align: right; color: #7A766F;">${formatCents(v.taxCents)} CAD</td></tr>` : ""}
         <tr style="border-top: 1px solid #E5DFD3;"><td style="padding: 12px 0 0; font-weight: 600;">Total paid</td><td style="padding: 12px 0 0; text-align: right; font-weight: 600;">${formatCents(v.totalCents)} CAD</td></tr>
       </table>
       <p style="font-family: monospace; font-size: 12px; color: #7A766F;">Booking ID: ${v.bookingId}</p>

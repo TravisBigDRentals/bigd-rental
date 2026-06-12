@@ -13,6 +13,13 @@ export type AddonSelection = {
 // price changes don't rewrite past totals.
 export const LIABILITY_WAIVER_CENTS = 40000;
 
+// Canadian GST applied to all rental services (equipment, extras,
+// add-ons, liability waiver). Rates on equipment + add-ons are stored
+// tax-EXCLUSIVE — GST sits on top. Alberta has no PST, so 5% is the
+// full sales tax. Snapshotted per booking via bookings.tax_rate so a
+// future rate change doesn't rewrite past totals.
+export const GST_RATE = 0.05;
+
 export type Discount =
   | { type: "percent"; value: number }   // 1-100
   | { type: "amount"; value: number };   // cents off
@@ -55,6 +62,11 @@ export type PricingBreakdown = {
   subtotalCents: number;
   discountCents: number;
   liabilityWaiverCents: number;  // 0 or LIABILITY_WAIVER_CENTS
+  // GST sits on top of (subtotal − discount) + waiver. Rate is
+  // snapshotted per booking so future rate changes don't rewrite
+  // past totals.
+  taxRate: number;               // e.g. 0.05 for 5% GST
+  taxCents: number;
   totalCents: number;
 };
 
@@ -129,6 +141,12 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
   const discountCents = computeDiscountCents(subtotalCents, input.discount);
   const liabilityWaiverCents = input.liabilityWaiverOptIn ? LIABILITY_WAIVER_CENTS : 0;
 
+  // Taxable base = what the customer actually pays for the rental.
+  // Discount comes off first, then waiver is added; GST applies to
+  // the whole package. Rounded to whole cents.
+  const preTaxCents = Math.max(0, subtotalCents - discountCents) + liabilityWaiverCents;
+  const taxCents = Math.round(preTaxCents * GST_RATE);
+
   return {
     days,
     equipmentCents,
@@ -140,9 +158,9 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
     subtotalCents,
     discountCents,
     liabilityWaiverCents,
-    // Discount applies to subtotal only — waiver is added after,
-    // never discounted away.
-    totalCents: Math.max(0, subtotalCents - discountCents) + liabilityWaiverCents,
+    taxRate: GST_RATE,
+    taxCents,
+    totalCents: preTaxCents + taxCents,
   };
 }
 

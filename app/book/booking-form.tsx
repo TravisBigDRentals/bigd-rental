@@ -1859,6 +1859,12 @@ function StepReview(props: {
             <span className="font-mono">{formatCents(pricing.liabilityWaiverCents)}</span>
           </div>
         )}
+        {pricing.taxCents > 0 && (
+          <div className="flex justify-between">
+            <span className="text-sm">GST (5%)</span>
+            <span className="font-mono">{formatCents(pricing.taxCents)}</span>
+          </div>
+        )}
         <div className="border-t border-ink/10 pt-2 flex justify-between font-display text-xl font-semibold">
           <span>Total</span>
           <span>{formatCents(pricing.totalCents)}</span>

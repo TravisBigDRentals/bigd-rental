@@ -31,6 +31,8 @@ type BookingRow = {
   dropoff_time: string | null;
   total_cents: number;
   liability_waiver_cents: number;
+  tax_cents: number;
+  tax_rate: number;
   payment_intent_id: string | null;
   paid_at: string | null;
   signature_completed_at: string | null;
@@ -82,7 +84,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("bookings")
     .select(`
-      id, status, start_date, end_date, dropoff_time, total_cents, liability_waiver_cents,
+      id, status, start_date, end_date, dropoff_time, total_cents, liability_waiver_cents, tax_cents, tax_rate,
       payment_intent_id, paid_at, signature_completed_at,
       delivered_at, returned_at, created_at,
       customer:customer_id (
@@ -120,6 +122,8 @@ export async function GET() {
     "Extra equipment subtotal (CAD)",
     "Add-ons subtotal (CAD)",
     "Liability waiver (CAD)",
+    "GST (CAD)",
+    "GST rate",
     "Total (CAD)",
     "Total cents (raw)",
     "Square payment ID",
@@ -187,6 +191,8 @@ export async function GET() {
       pricing ? formatCents(pricing.extraEquipmentCents) : "",
       pricing ? formatCents(pricing.addonsCents) : "",
       formatCents(raw.liability_waiver_cents),
+      formatCents(raw.tax_cents),
+      raw.tax_rate,
       formatCents(raw.total_cents),
       raw.total_cents,
       raw.payment_intent_id ?? "",

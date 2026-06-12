@@ -52,6 +52,8 @@ type BookingDetail = {
   total_cents: number;
   discount_cents: number;
   liability_waiver_cents: number;
+  tax_cents: number;
+  tax_rate: number;
   canceled_at: string | null;
   canceled_reason: string | null;
   refund_id: string | null;
@@ -125,7 +127,7 @@ export default async function BookingDetailPage({
     .from("bookings")
     .select(`
       id, start_date, end_date, dropoff_time, special_instructions, status,
-      total_cents, discount_cents, liability_waiver_cents, payment_intent_id, paid_at, signed_agreement_pdf_url,
+      total_cents, discount_cents, liability_waiver_cents, tax_cents, tax_rate, payment_intent_id, paid_at, signed_agreement_pdf_url,
       canceled_at, canceled_reason, refund_id, refund_amount_cents,
       drivers_license_front_url, drivers_license_back_url,
       drivers_license_number, drivers_license_expiry,
@@ -316,6 +318,11 @@ export default async function BookingDetailPage({
             {booking.liability_waiver_cents > 0 && (
               <p className="mt-1 text-xs text-muted">
                 Liability waiver applied — {formatCents(booking.liability_waiver_cents)} (flat, non-discountable)
+              </p>
+            )}
+            {booking.tax_cents > 0 && (
+              <p className="mt-1 text-xs text-muted">
+                Includes GST ({(booking.tax_rate * 100).toFixed(0)}%) — {formatCents(booking.tax_cents)}
               </p>
             )}
           </div>
