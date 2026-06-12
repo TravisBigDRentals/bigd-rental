@@ -81,6 +81,19 @@ async function signedDlUrl(path: string | null): Promise<string | null> {
   return data?.signedUrl ?? null;
 }
 
+// The BoldSign webhook stores the signed agreement as a path inside
+// the private `signed-agreements` bucket (e.g. `<bookingId>/agreement.pdf`)
+// rather than a public URL. Mint a short-lived signed URL so admins can
+// download it from the booking detail page.
+async function signedAgreementUrl(path: string | null): Promise<string | null> {
+  if (!path) return null;
+  const supabase = createSupabaseServiceClient();
+  const { data } = await supabase.storage
+    .from("signed-agreements")
+    .createSignedUrl(path, 60 * 60); // 1 hour — admin reloads the page if it expires
+  return data?.signedUrl ?? null;
+}
+
 export default async function BookingDetailPage({
   params,
 }: {
@@ -115,9 +128,10 @@ export default async function BookingDetailPage({
   // historical bookings created before the snapshot was wired up.
   const dlFrontPath = booking.drivers_license_front_url ?? booking.customer?.drivers_license_front_url ?? null;
   const dlBackPath = booking.drivers_license_back_url ?? booking.customer?.drivers_license_back_url ?? null;
-  const [dlFrontUrl, dlBackUrl] = await Promise.all([
+  const [dlFrontUrl, dlBackUrl, signedAgreementHref] = await Promise.all([
     signedDlUrl(dlFrontPath),
     signedDlUrl(dlBackPath),
+    signedAgreementUrl(booking.signed_agreement_pdf_url),
   ]);
 
   const customer = booking.customer;
@@ -297,8 +311,8 @@ export default async function BookingDetailPage({
           <div>
             <p className="text-sm text-muted">Signed agreement</p>
             <p className="font-mono text-xs">
-              {booking.signed_agreement_pdf_url ? (
-                <a href={booking.signed_agreement_pdf_url} target="_blank" rel="noopener" className="underline text-accent">
+              {signedAgreementHref ? (
+                <a href={signedAgreementHref} target="_blank" rel="noopener" className="underline text-accent">
                   ↗ Download PDF
                 </a>
               ) : "Not signed yet"}
