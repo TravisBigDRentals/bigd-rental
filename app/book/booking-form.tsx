@@ -873,9 +873,12 @@ export function BookingForm({
             interfere with the desktop sidebar's grid-cell layout */}
         <PricingMobileBar
           equipment={selectedEquipment}
+          extraEquipment={selectedExtraEquipment}
           startDate={startDate}
           endDate={endDate}
           selectedAddons={selectedAddons}
+          liabilityWaiver={liabilityWaiver}
+          appliedCoupon={appliedCoupon}
           nextLabel={
             step === 1 ? "Next →" :
             step === 2 ? "Review →" :
