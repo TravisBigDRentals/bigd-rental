@@ -6,7 +6,7 @@ import { DayPicker, type DateRange } from "react-day-picker";
 import "react-day-picker/style.css";
 import { PaymentForm, CreditCard } from "react-square-web-payments-sdk";
 import type { Addon, Equipment } from "@/lib/bookings/queries";
-import { calculatePricing, formatCents, LIABILITY_WAIVER_CENTS } from "@/lib/pricing";
+import { calculatePricing, formatCents, LIABILITY_WAIVER_CENTS, selectEquipmentTier } from "@/lib/pricing";
 import { DLDropZone } from "@/components/dl-drop-zone";
 import { PasswordField } from "@/components/password-field";
 import { publicEquipmentImageUrl } from "@/lib/equipment-images";
@@ -516,6 +516,8 @@ export function BookingForm({
       addons: selectedAddons.map((a) => ({
         addonId: a.id,
         dailyRateCents: a.daily_rate_cents,
+        weeklyRateCents: a.weekly_rate_cents,
+        monthlyRateCents: a.monthly_rate_cents,
         quantity: 1,
       })),
       liabilityWaiverOptIn: liabilityWaiver,
@@ -1099,7 +1101,13 @@ function StepConfigure(props: {
           <SectionTitle>Attachments</SectionTitle>
           <p className="mt-3 text-sm text-muted">
             First attachment is free. Each additional attachment is{" "}
-            {formatCents(compatibleAddons[0]?.daily_rate_cents ?? 4000)}/day.
+            {formatCents(compatibleAddons[0]?.daily_rate_cents ?? 2500)}/day
+            {compatibleAddons[0]?.weekly_rate_cents
+              ? `, ${formatCents(compatibleAddons[0].weekly_rate_cents)}/week`
+              : ""}
+            {compatibleAddons[0]?.monthly_rate_cents
+              ? `, or ${formatCents(compatibleAddons[0].monthly_rate_cents)}/month`
+              : ""}.
           </p>
           <div className="mt-5 space-y-2.5">
             {compatibleAddons.map((addon) => {
@@ -1765,14 +1773,33 @@ function StepReview(props: {
         {addons.length > 0 ? (
           <SummaryBlock title="Attachments">
             <ul className="text-sm space-y-0.5">
-              {addons.map((a, i) => (
-                <li key={a.id} className="flex justify-between">
-                  <span>{a.name}</span>
-                  <span className="font-mono text-muted">
-                    {i === 0 ? "Free" : `${formatCents(a.daily_rate_cents)}/day`}
-                  </span>
-                </li>
-              ))}
+              {addons.map((a, i) => {
+                if (i === 0) {
+                  return (
+                    <li key={a.id} className="flex justify-between">
+                      <span>{a.name}</span>
+                      <span className="font-mono text-muted">Free</span>
+                    </li>
+                  );
+                }
+                const { tier } = selectEquipmentTier(
+                  pricing.days,
+                  a.daily_rate_cents,
+                  a.weekly_rate_cents,
+                  a.monthly_rate_cents,
+                );
+                const rateLabel = tier === "monthly" && a.monthly_rate_cents
+                  ? `${formatCents(a.monthly_rate_cents)}/mo`
+                  : tier === "weekly" && a.weekly_rate_cents
+                    ? `${formatCents(a.weekly_rate_cents)}/wk`
+                    : `${formatCents(a.daily_rate_cents)}/day`;
+                return (
+                  <li key={a.id} className="flex justify-between">
+                    <span>{a.name}</span>
+                    <span className="font-mono text-muted">{rateLabel}</span>
+                  </li>
+                );
+              })}
             </ul>
           </SummaryBlock>
         ) : (

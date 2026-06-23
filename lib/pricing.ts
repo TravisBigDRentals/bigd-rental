@@ -3,6 +3,11 @@ import { differenceInCalendarDays, parseISO } from "date-fns";
 export type AddonSelection = {
   addonId: string;
   dailyRateCents: number;
+  // Optional tier rates. When null/undefined for an addon, that tier
+  // falls back to daily × days — mirrors the equipment tier behaviour
+  // for back-compat with any addon row created before tiered rates.
+  weeklyRateCents?: number | null;
+  monthlyRateCents?: number | null;
   quantity: number;
 };
 
@@ -134,7 +139,16 @@ export function calculatePricing(input: PricingInput): PricingBreakdown {
 
   const addonsCents = input.addons.reduce((sum, addon, i) => {
     if (i === 0) return sum; // first addon is free
-    return sum + addon.dailyRateCents * days * addon.quantity;
+    // Pick a tier the same way equipment does — weekly/monthly is just
+    // a discounted prepaid block, so daily × days at the effective tier
+    // rate is the right model.
+    const { effectiveDailyCents } = selectEquipmentTier(
+      days,
+      addon.dailyRateCents,
+      addon.weeklyRateCents,
+      addon.monthlyRateCents,
+    );
+    return sum + Math.round(effectiveDailyCents * days) * addon.quantity;
   }, 0);
 
   const subtotalCents = equipmentCents + extraEquipmentCents + addonsCents;

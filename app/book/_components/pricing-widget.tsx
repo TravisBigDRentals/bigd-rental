@@ -50,7 +50,13 @@ function computeTotals({ equipment, extraEquipment, startDate, endDate, selected
   const addonsSubtotal = selectedAddons.reduce((sum, a, i) => {
     if (!haveDates) return sum;
     if (i === 0) return sum;
-    return sum + a.daily_rate_cents * days;
+    const { effectiveDailyCents } = selectEquipmentTier(
+      days,
+      a.daily_rate_cents,
+      a.weekly_rate_cents,
+      a.monthly_rate_cents,
+    );
+    return sum + Math.round(effectiveDailyCents * days);
   }, 0);
   const subtotal = equipmentSubtotal + extraSubtotal + addonsSubtotal;
   const discount: Discount | null = appliedCoupon
@@ -139,14 +145,22 @@ export function PricingWidget(props: PricingProps) {
 
           {selectedAddons.map((a, i) => {
             const isFree = i === 0;
-            const sub = isFree || !haveDates ? 0 : a.daily_rate_cents * days;
+            const addonTier = haveDates
+              ? selectEquipmentTier(days, a.daily_rate_cents, a.weekly_rate_cents, a.monthly_rate_cents)
+              : null;
+            const sub = isFree || !addonTier ? 0 : Math.round(addonTier.effectiveDailyCents * days);
+            const rateLabel = isFree
+              ? "First attachment — free"
+              : addonTier?.tier === "monthly" && a.monthly_rate_cents
+                ? `${formatCents(a.monthly_rate_cents)}/mo · ${days} day${days === 1 ? "" : "s"}`
+                : addonTier?.tier === "weekly" && a.weekly_rate_cents
+                  ? `${formatCents(a.weekly_rate_cents)}/wk · ${days} day${days === 1 ? "" : "s"}`
+                  : `${formatCents(a.daily_rate_cents)}/day${haveDates ? ` × ${days}` : ""}`;
             return (
               <li key={a.id} className="rounded-lg bg-paper border border-ink/10 px-4 py-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-display tracking-wide uppercase text-sm truncate">{a.name}</p>
-                  <p className="mt-0.5 font-mono text-[11px] text-muted">
-                    {isFree ? "First attachment — free" : `${formatCents(a.daily_rate_cents)}/day${haveDates ? ` × ${days}` : ""}`}
-                  </p>
+                  <p className="mt-0.5 font-mono text-[11px] text-muted">{rateLabel}</p>
                 </div>
                 <span className="font-mono text-sm font-semibold whitespace-nowrap">
                   {isFree ? "Free" : haveDates ? formatCents(sub) : "—"}

@@ -42,11 +42,17 @@ export async function POST(req: Request) {
   }
 
   // Fetch addons + validate compatibility
-  let addons: { id: string; daily_rate_cents: number; compatible_equipment_type: string }[] = [];
+  let addons: {
+    id: string;
+    daily_rate_cents: number;
+    weekly_rate_cents: number | null;
+    monthly_rate_cents: number | null;
+    compatible_equipment_type: string;
+  }[] = [];
   if (booking.addon_ids.length > 0) {
     const { data, error: addErr } = await supabase
       .from("addons")
-      .select("id, daily_rate_cents, compatible_equipment_type")
+      .select("id, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, compatible_equipment_type")
       .in("id", booking.addon_ids);
     if (addErr) return NextResponse.json({ error: addErr.message }, { status: 500 });
     addons = data ?? [];
@@ -116,6 +122,8 @@ export async function POST(req: Request) {
     addons: addons.map((a) => ({
       addonId: a.id,
       dailyRateCents: a.daily_rate_cents,
+      weeklyRateCents: a.weekly_rate_cents,
+      monthlyRateCents: a.monthly_rate_cents,
       quantity: 1,
     })),
     extraEquipment: extraEquipment
@@ -286,12 +294,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg || "Booking insert failed" }, { status: 500 });
   }
 
-  // Snapshot booking_addons line items
+  // Snapshot booking_addons line items — capture all three tier rates
+  // so a future rate change in the addons table doesn't rewrite past
+  // bookings' totals (same model as bookings.total_cents).
   if (addons.length > 0) {
     const rows = addons.map((a) => ({
       booking_id: bookingRow.id,
       addon_id: a.id,
       daily_rate_cents: a.daily_rate_cents,
+      weekly_rate_cents: a.weekly_rate_cents,
+      monthly_rate_cents: a.monthly_rate_cents,
     }));
     const { error: baErr } = await supabase.from("booking_addons").insert(rows);
     if (baErr) {

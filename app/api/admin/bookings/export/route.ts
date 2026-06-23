@@ -22,7 +22,7 @@ type Customer = {
   project_postal_code: string | null;
 };
 type Equipment = { name: string; serial: string; daily_rate_cents: number; weekly_rate_cents: number | null; monthly_rate_cents: number | null };
-type Addon = { name: string; daily_rate_cents: number };
+type Addon = { name: string; daily_rate_cents: number; weekly_rate_cents: number | null; monthly_rate_cents: number | null };
 type BookingRow = {
   id: string;
   status: string;
@@ -94,7 +94,7 @@ export async function GET() {
       ),
       equipment:equipment_id ( name, serial, daily_rate_cents, weekly_rate_cents, monthly_rate_cents ),
       extra_equipment:extra_equipment_id ( name, serial, daily_rate_cents, weekly_rate_cents, monthly_rate_cents ),
-      booking_addons ( addon:addon_id ( name, daily_rate_cents ) )
+      booking_addons ( addon:addon_id ( name, daily_rate_cents, weekly_rate_cents, monthly_rate_cents ) )
     `)
     .order("created_at", { ascending: false });
   if (error) return new Response(`Query failed: ${error.message}`, { status: 500 });
@@ -158,7 +158,13 @@ export async function GET() {
                 monthlyRateCents: extraEquipment.monthly_rate_cents,
               }
             : null,
-          addons: addons.map((a) => ({ addonId: "", dailyRateCents: a.daily_rate_cents, quantity: 1 })),
+          addons: addons.map((a) => ({
+            addonId: "",
+            dailyRateCents: a.daily_rate_cents,
+            weeklyRateCents: a.weekly_rate_cents,
+            monthlyRateCents: a.monthly_rate_cents,
+            quantity: 1,
+          })),
           liabilityWaiverOptIn: raw.liability_waiver_cents > 0,
         })
       : null;

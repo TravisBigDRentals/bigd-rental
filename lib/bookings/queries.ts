@@ -19,6 +19,8 @@ export type Addon = {
   id: string;
   name: string;
   daily_rate_cents: number;
+  weekly_rate_cents: number | null;
+  monthly_rate_cents: number | null;
   compatible_equipment_type: "excavator" | "skid_steer" | "attachment" | "plate_compactor";
   image_url: string | null;
 };
@@ -38,7 +40,7 @@ export async function listAddons(): Promise<Addon[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("addons")
-    .select("id, name, daily_rate_cents, compatible_equipment_type, image_url")
+    .select("id, name, daily_rate_cents, weekly_rate_cents, monthly_rate_cents, compatible_equipment_type, image_url")
     .order("name");
   if (error) throw error;
   return (data ?? []) as Addon[];
