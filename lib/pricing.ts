@@ -13,10 +13,10 @@ export type AddonSelection = {
 
 // Optional liability waiver — flat fee, NOT discountable. If the
 // customer opts in we add this AFTER the discount is applied, so a
-// 100%-off coupon on a $1000 rental still owes the $400 waiver.
+// 100%-off coupon on a $1000 rental still owes the $499.99 waiver.
 // Snapshotted on each booking at the moment of submission so future
 // price changes don't rewrite past totals.
-export const LIABILITY_WAIVER_CENTS = 40000;
+export const LIABILITY_WAIVER_CENTS = 49999;
 
 // Canadian GST applied to all rental services (equipment, extras,
 // add-ons, liability waiver). Rates on equipment + add-ons are stored
